@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Save, Plus, Trash2, Edit3, X } from 'lucide-react';
 import { gateDisplay } from '../hooks/useFileNames';
+import { useAuth } from '../stores/auth';
 
 interface Role { id: string; name: string; emoji: string; gates: string[]; description: string; style: string; personality: string; }
 const ALL_GATES = ['G1', '需求门', 'G2', 'G2a', 'Task', 'G3', '测试门', 'G4'];
 
 export default function Roles() {
+  const { isAdmin, rolePermissions } = useAuth();
+  const canWrite = isAdmin || rolePermissions.includes('project:write');
+  const canDelete = isAdmin || rolePermissions.includes('project:delete');
   const [roles, setRoles] = useState<Role[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Role>>({});
@@ -38,7 +42,7 @@ export default function Roles() {
           <h1 style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, margin: 0 }}>角色管理</h1>
           <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{roles.length} 个角色</span>
         </div>
-        <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm"><Plus size={14} /> 新增角色</button>
+        {canWrite && <button onClick={() => setShowAdd(true)} className="btn btn-primary btn-sm"><Plus size={14} /> 新增角色</button>}
       </div>
 
       {showAdd && (
@@ -87,8 +91,8 @@ export default function Roles() {
                     <><button onClick={() => saveEdit(role.id)} className="btn btn-ghost btn-xs"><Save size={14} /></button>
                     <button onClick={cancelEdit} className="btn btn-ghost btn-xs"><X size={14} /></button></>
                   ) : (
-                    <><button onClick={() => startEdit(role)} className="btn btn-ghost btn-xs"><Edit3 size={14} /></button>
-                    <button onClick={() => deleteRole(role.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }}><Trash2 size={14} /></button></>
+                    <>{canWrite && <button onClick={() => startEdit(role)} className="btn btn-ghost btn-xs"><Edit3 size={14} /></button>}
+                    {canDelete && <button onClick={() => deleteRole(role.id)} className="btn btn-ghost btn-xs" style={{ color: 'var(--red)' }}><Trash2 size={14} /></button>}</>
                   )}
                 </div>
               </div>

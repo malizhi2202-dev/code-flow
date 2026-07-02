@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FileText, Save, X, Edit3, ChevronRight, Clock, FolderOpen } from 'lucide-react';
 import { artifactName } from '../hooks/useFileNames';
+import { useAuth } from '../stores/auth';
 
 const STAGES = [
   { id: '0-change', name: '变更提案', file: 'CHANGE.md' },
@@ -23,6 +24,8 @@ const STAGE_COLORS: Record<string, string> = {
 interface ArtifactInfo { changeId: string; fname: string; phase: string; }
 
 export default function SpecsEditor({ onSelect }: { onSelect: (id: string) => void }) {
+  const { isAdmin, rolePermissions } = useAuth();
+  const canWrite = isAdmin || rolePermissions.includes('project:write');
   const [changes, setChanges] = useState<any[]>([]);
   const [activeStage, setActiveStage] = useState('0-change');
   const [openFile, setOpenFile] = useState<{ changeId: string; fname: string } | null>(null);
@@ -190,11 +193,11 @@ export default function SpecsEditor({ onSelect }: { onSelect: (id: string) => vo
                 {editing ? (
                   <>
                     <button className="btn btn-sm" onClick={() => { setEditing(false); setEditText(content); }}><X size={12} /> 取消</button>
-                    <button className="btn btn-primary btn-sm" onClick={saveFile}><Save size={12} /> 保存</button>
+                    {canWrite && <button className="btn btn-primary btn-sm" onClick={saveFile}><Save size={12} /> 保存</button>}
                   </>
-                ) : (
+                ) : canWrite ? (
                   <button className="btn btn-sm" onClick={() => { setEditText(content); setEditing(true); }}><Edit3 size={12} /> 编辑</button>
-                )}
+                ) : null}
               </div>
             </div>
             {editing ? (

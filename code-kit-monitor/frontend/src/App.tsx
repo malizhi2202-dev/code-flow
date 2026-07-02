@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, GitBranch, Users, FileText, Settings, Layers, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon } from 'lucide-react';
+import { Activity, GitBranch, Users, FileText, Settings, Layers, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon, AlertCircle } from 'lucide-react';
 import Home from './pages/Home';
 import Detail from './pages/Detail';
 import Roles from './pages/Roles';
@@ -15,6 +15,16 @@ import ProjectSwitcher from './components/ProjectSwitcher';
 import UserArea from './components/UserSelect';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useAuth } from './stores/auth';
+
+function EmptyPerm() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: 12 }}>
+      <AlertCircle size={40} style={{ opacity: 0.3 }} />
+      <p style={{ fontSize: 14 }}>暂无此功能权限</p>
+      <p style={{ fontSize: 11 }}>请联系管理员分配相应权限</p>
+    </div>
+  );
+}
 
 type NavItem = { id: string; label: string; icon: React.ReactNode };
 const NAV: NavItem[] = [
@@ -48,7 +58,7 @@ export default function App() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [summary, setSummary] = useState<any>(null);
-  const { isAdmin, fetchMe, fetchUsers, loaded } = useAuth();
+  const { isAdmin, rolePermissions, fetchMe, fetchUsers, loaded } = useAuth();
 
   // 未登录 → 显示登录页
   const userId = localStorage.getItem('current_user_id');
@@ -71,6 +81,23 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
+  // ── 按权限过滤导航 ──
+  const perm = (p: string) => isAdmin || rolePermissions.includes(p);
+  const visibleNav = NAV.filter(item => {
+    switch (item.id) {
+      case 'home': case 'specs': case 'runtime': return perm('project:read');
+      case 'workflow': case 'roles': case 'docs': return perm('project:write');
+      default: return true;
+    }
+  });
+  const visibleAdminNav = ADMIN_NAV.filter(item => {
+    switch (item.id) {
+      case 'users': return perm('user:manage');
+      case 'audit': return perm('audit:view');
+      default: return false;
+    }
+  });
+
   const navigate = (id: string) => {
     setNav(id);
     setDetailId(null);
@@ -82,13 +109,13 @@ export default function App() {
     if (detailId) return <Detail changeId={detailId} onBack={() => setDetailId(null)} />;
     switch (nav) {
       case 'home': return <Home onSelect={openDetail} />;
-      case 'workflow': return <WorkflowEditor />;
-      case 'roles': return <Roles />;
-      case 'specs': return <SpecsEditor onSelect={(id) => setDetailId(id)} />;
-      case 'runtime': return <Runtime />;
-      case 'docs': return <DocEditor />;
-      case 'users': return <UserManagement />;
-      case 'audit': return <AuditLog />;
+      case 'workflow': return perm('project:write') ? <WorkflowEditor /> : <EmptyPerm />;
+      case 'roles': return perm('project:write') ? <Roles /> : <EmptyPerm />;
+      case 'specs': return perm('project:read') ? <SpecsEditor onSelect={(id) => setDetailId(id)} /> : <EmptyPerm />;
+      case 'runtime': return perm('project:read') ? <Runtime /> : <EmptyPerm />;
+      case 'docs': return perm('project:write') ? <DocEditor /> : <EmptyPerm />;
+      case 'users': return perm('user:manage') ? <UserManagement /> : <EmptyPerm />;
+      case 'audit': return perm('audit:view') ? <AuditLog /> : <EmptyPerm />;
       case 'profile': return <UserCenter onBack={() => navigate('home')} />;
       default: return <Home onSelect={openDetail} />;
     }
@@ -118,7 +145,7 @@ export default function App() {
 
         {/* 导航 */}
         <nav style={{ flex: 1, padding: '8px' }}>
-          {NAV.map(item => (
+          {visibleNav.map(item => (
             <button
               key={item.id}
               onClick={() => navigate(item.id)}
@@ -140,14 +167,14 @@ export default function App() {
           ))}
 
           {/* Admin only nav */}
-          {isAdmin && (
+          {visibleAdminNav.length > 0 && (
             <>
               {!collapsed && (
                 <div style={{ padding: '4px 10px', marginTop: 8, marginBottom: 4, fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.06 }}>
                   管理
                 </div>
               )}
-              {ADMIN_NAV.map(item => (
+              {visibleAdminNav.map(item => (
                 <button
                   key={item.id}
                   onClick={() => navigate(item.id)}

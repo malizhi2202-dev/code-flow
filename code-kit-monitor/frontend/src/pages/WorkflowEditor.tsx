@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Trash2, Save, ChevronUp, ChevronDown, Edit3, Settings, X, Users, GitBranch } from 'lucide-react';
 import { cn, gateDisplay, useFileNames } from '../hooks/useFileNames';
+import { useAuth } from '../stores/auth';
 
 interface Stage { id: string; name: string; gate: string | null; prompt: string; order: number; }
 interface Gate { id: string; name: string; experts: string[]; }
 interface Workflow { stages: Stage[]; gates: Gate[]; }
 
 export default function WorkflowEditor() {
+  const { isAdmin, rolePermissions } = useAuth();
+  const canWrite = isAdmin || rolePermissions.includes('project:write');
   const [wf, setWf] = useState<Workflow | null>(null);
   const [allRoles, setAllRoles] = useState<string[]>([]);
   const [editingGate, setEditingGate] = useState<string | null>(null);
@@ -80,7 +83,7 @@ export default function WorkflowEditor() {
             <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, fontFamily: 'var(--font-mono)' }}>工作流编辑器</h1>
             {saved && <span className="badge badge-green">已保存</span>}
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowAddStage(true)}><Plus size={14} /> 新增阶段</button>
+          {canWrite && <button className="btn btn-primary btn-sm" onClick={() => setShowAddStage(true)}><Plus size={14} /> 新增阶段</button>}
         </div>
 
         {/* 新增阶段表单 */}
@@ -109,12 +112,12 @@ export default function WorkflowEditor() {
                   <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{stage.name}</span>
                   {stage.gate && <span className="badge badge-purple">{stage.gate}</span>}
                   <span style={{ fontSize: 11, color: 'var(--text-weak)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>{cn(stage.prompt, nameMap)}</span>
-                  <div style={{ display: 'flex', gap: 2, marginLeft: 4 }}>
+                  {canWrite && <div style={{ display: 'flex', gap: 2, marginLeft: 4 }}>
                     <button className="btn btn-ghost btn-sm" onClick={() => moveStage(i, -1)} disabled={i === 0}><ChevronUp size={12} /></button>
                     <button className="btn btn-ghost btn-sm" onClick={() => moveStage(i, 1)} disabled={i === wf.stages.length - 1}><ChevronDown size={12} /></button>
                     <button className="btn btn-ghost btn-sm" onClick={() => { setNewStage({ id: '', name: '', gate: '', prompt: '' }); setShowAddStage(true); }} title="在此后插入"><Plus size={12} /></button>
                     <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => deleteStage(i)}><Trash2 size={12} /></button>
-                  </div>
+                  </div>}
                 </div>
               </div>
             ))}

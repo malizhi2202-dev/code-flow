@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Layers, Check } from 'lucide-react';
+import { useAuth } from '../stores/auth';
 
 interface Project { name: string; root: string; has_specs: boolean; is_current: boolean; }
 
 export default function ProjectSwitcher({ collapsed }: { collapsed: boolean }) {
+  const { isAdmin, rolePermissions } = useAuth();
+  const canRead = isAdmin || rolePermissions.includes('project:read');
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
 
@@ -13,7 +16,10 @@ export default function ProjectSwitcher({ collapsed }: { collapsed: boolean }) {
     });
   };
 
-  useEffect(() => { fetchProjects(); }, []);
+  useEffect(() => { if (canRead) fetchProjects(); }, [canRead]);
+
+  // 无 project:read 权限 → 不展示
+  if (!canRead) return null;
 
   const switchProject = async (root: string) => {
     await fetch('/api/admin/projects/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ root }) });
@@ -22,7 +28,21 @@ export default function ProjectSwitcher({ collapsed }: { collapsed: boolean }) {
   };
 
   const currentProject = projects.find(p => p.is_current);
-  const curName = currentProject?.name || (projects[0]?.name ?? '?');
+  const curName = currentProject?.name || (projects[0]?.name || '无项目');
+
+  // 无可见项目 → 只展示文字，不可展开
+  if (projects.length === 0) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px',
+        color: 'var(--text-muted)', fontSize: 11, fontFamily: 'var(--font-mono)',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+      }}>
+        <Layers size={13} style={{ color: 'var(--text-muted)' }} />
+        {!collapsed && <span>无项目</span>}
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: 'relative' }}>

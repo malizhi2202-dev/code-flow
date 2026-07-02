@@ -135,7 +135,7 @@ export default function LoginPage() {
             )}
 
             <button onClick={handleLogin} disabled={!password || logging}
-              className="btn btn-primary" style={{ width: '100%', padding: '10px 0', fontSize: 14 }}>
+              className="btn btn-primary" style={{ width: '100%', padding: '10px 0', fontSize: 14, justifyContent: 'center' }}>
               {logging ? '登录中...' : '登录'}
             </button>
           </div>

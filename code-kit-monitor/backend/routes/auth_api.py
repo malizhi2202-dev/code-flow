@@ -31,12 +31,13 @@ async def list_users_public():
 
 @router.get("/api/auth/me")
 async def me(request: Request):
-    """返回当前登录用户信息。"""
+    """返回当前登录用户信息（含有效权限=角色基础+显式分配）。"""
     user = get_current_user(request)
+    perm_info = get_user_permissions(user)
     return {
         "user": user,
         "permissions": PERMISSION_DEFS,
-        "role_permissions": ROLE_PERMISSIONS.get(user.get("role", "user"), []),
+        "role_permissions": perm_info["effective_permissions"],  # 有效权限=角色+自定义
     }
 
 

@@ -5,17 +5,15 @@ import ConfirmDialog from '../components/ConfirmDialog';
 
 interface Project { name: string; root: string; has_specs: boolean; is_current: boolean; }
 
-// 危险权限定义（admin 可授予 user 的额外权限）
-const DANGEROUS_PERMISSIONS = [
-  { key: 'project:delete', label: '删除产物/角色', desc: '允许删除变更、产物文件和专家角色', icon: '🗑️' },
-  { key: 'workflow:stop', label: '停止流程', desc: '允许中断正在执行的工作流', icon: '⏹️' },
-  { key: 'user:manage', label: '管理用户', desc: '允许创建、编辑、删除其他用户', icon: '👥' },
-  { key: 'audit:view', label: '查看审计日志', desc: '允许查看所有操作的审计记录', icon: '📋' },
+// 全部可分配权限（admin 可对任意用户勾选/取消）
+const ALL_PERMISSIONS = [
+  { key: 'project:read', label: '查看项目', desc: '查看项目列表、变更、文档内容', icon: '👁️', dangerous: false },
+  { key: 'project:write', label: '编辑项目', desc: '修改配置、文件、门禁、工作流', icon: '✏️', dangerous: false },
+  { key: 'project:delete', label: '删除产物/角色', desc: '允许删除变更、产物文件和专家角色', icon: '🗑️', dangerous: true },
+  { key: 'workflow:stop', label: '停止流程', desc: '允许中断正在执行的工作流', icon: '⏹️', dangerous: true },
+  { key: 'user:manage', label: '管理用户', desc: '允许创建、编辑、删除其他用户', icon: '👥', dangerous: true },
+  { key: 'audit:view', label: '查看审计日志', desc: '允许查看所有操作的审计记录', icon: '📋', dangerous: true },
 ];
-
-const BASE_PERM_LABELS: Record<string, string> = {
-  'project:read': '查看项目', 'project:write': '编辑项目',
-};
 
 export default function UserManagement() {
   const { userList, fetchUsers, isAdmin } = useAuth();
@@ -138,13 +136,13 @@ export default function UserManagement() {
             )}
           </div>
 
-          {/* 危险权限（仅 user 角色显示） */}
-          {newUser.role === 'user' && (
+          {/* 权限分配（admin 豁免，其他角色显示全部权限勾选框） */}
+          {newUser.role !== 'admin' && (
             <div style={{ marginBottom: 12, padding: 12, background: 'var(--bg-input)', borderRadius: 'var(--r-md)' }}>
-              <div style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <AlertTriangle size={12} /> 危险权限授予（慎重）
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 8 }}>
+                权限分配（显式勾选，无默认权限）
               </div>
-              {DANGEROUS_PERMISSIONS.map(perm => (
+              {ALL_PERMISSIONS.map(perm => (
                 <label key={perm.key} style={{
                   display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 0',
                   cursor: 'pointer', borderBottom: '1px solid var(--border)',
@@ -155,7 +153,7 @@ export default function UserManagement() {
                       ...newUser,
                       custom_permissions: togglePerm(newUser.custom_permissions, perm.key),
                     })}
-                    style={{ marginTop: 2, accentColor: 'var(--red)' }} />
+                    style={{ marginTop: 2, accentColor: perm.dangerous ? 'var(--red)' : 'var(--blue)' }} />
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600 }}>
                       <span style={{ marginRight: 4 }}>{perm.icon}</span>
@@ -163,6 +161,7 @@ export default function UserManagement() {
                       <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 6, fontFamily: 'var(--font-mono)' }}>
                         {perm.key}
                       </span>
+                      {perm.dangerous && <span style={{ fontSize: 9, color: 'var(--red)', marginLeft: 6 }}>⚠ 危险</span>}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{perm.desc}</div>
                   </div>
@@ -255,13 +254,13 @@ export default function UserManagement() {
                     </div>
                   </div>
 
-                  {/* 危险权限编辑（user only） */}
-                  {editForm.role === 'user' && (
+                  {/* 权限编辑（admin 豁免，其他角色显示全部权限） */}
+                  {editForm.role !== 'admin' && (
                     <div style={{ padding: 10, background: 'var(--bg-input)', borderRadius: 'var(--r-md)', marginBottom: 8 }}>
-                      <div style={{ fontSize: 10, color: 'var(--orange)', fontWeight: 600, marginBottom: 6 }}>
-                        ⚠️ 危险权限
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 6 }}>
+                        权限分配（全部显式勾选，无默认权限）
                       </div>
-                      {DANGEROUS_PERMISSIONS.map(perm => (
+                      {ALL_PERMISSIONS.map(perm => (
                         <label key={perm.key} style={{
                           display: 'flex', alignItems: 'center', gap: 6,
                           padding: '3px 0', cursor: 'pointer', fontSize: 11,
@@ -272,11 +271,12 @@ export default function UserManagement() {
                               ...editForm,
                               custom_permissions: togglePerm(editForm.custom_permissions || [], perm.key),
                             })}
-                            style={{ accentColor: 'var(--red)' }} />
+                            style={{ accentColor: perm.dangerous ? 'var(--red)' : 'var(--blue)' }} />
                           {perm.icon} {perm.label}
                           <span style={{ color: 'var(--text-muted)', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
                             {perm.key}
                           </span>
+                          {perm.dangerous && <span style={{ fontSize: 9, color: 'var(--red)', marginLeft: 4 }}>⚠</span>}
                         </label>
                       ))}
                     </div>
@@ -306,18 +306,17 @@ export default function UserManagement() {
                     <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>权限: </span>
                     {u.role === 'admin' ? (
                       <span className="badge badge-blue">全部权限</span>
-                    ) : (
-                      <>
-                        <span className="badge badge-green" style={{ marginRight: 3 }}>查看+编辑</span>
-                        {customPerms.map((p: string) => (
-                          <span key={p} className="badge badge-red" style={{ marginRight: 3 }}>
-                            {p.replace('project:', '').replace(':', ' ')}
+                    ) : customPerms.length > 0 ? (
+                      customPerms.map((p: string) => {
+                        const permDef = ALL_PERMISSIONS.find(ap => ap.key === p);
+                        return (
+                          <span key={p} className={`badge ${permDef?.dangerous ? 'badge-red' : 'badge-green'}`} style={{ marginRight: 3 }}>
+                            {permDef?.label || p}
                           </span>
-                        ))}
-                        {customPerms.length === 0 && (
-                          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>仅基础</span>
-                        )}
-                      </>
+                        );
+                      })
+                    ) : (
+                      <span style={{ fontSize: 10, color: 'var(--red)' }}>无权限</span>
                     )}
                   </div>
                 </>

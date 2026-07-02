@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Save, FileText, RefreshCw, Edit3 } from 'lucide-react';
 import { cn, useFileNames } from '../hooks/useFileNames';
+import { useAuth } from '../stores/auth';
 
 interface FileInfo { path: string; size: number; type: string; }
 
 export default function DocEditor() {
+  const { isAdmin, rolePermissions } = useAuth();
+  const canWrite = isAdmin || rolePermissions.includes('project:write');
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [selected, setSelected] = useState('');
   const [content, setContent] = useState('');
@@ -110,13 +113,15 @@ export default function DocEditor() {
                 <span className="mono" style={{ fontSize: 11, color: 'var(--text-muted)' }}>{content.length.toLocaleString()} 字符</span>
                 {isModified && <span style={{ fontSize: 11, color: 'var(--orange)' }}>已修改</span>}
                 {saved && <span className="badge badge-green">已保存</span>}
-                <button className="btn btn-sm" onClick={() => openFile(selected)} disabled={loading}><RefreshCw size={12} /></button>
-                <button className="btn btn-primary btn-sm" onClick={saveFile} disabled={!isModified}><Save size={12} /> 保存</button>
+                {canWrite && <button className="btn btn-sm" onClick={() => openFile(selected)} disabled={loading}><RefreshCw size={12} /></button>}
+                {canWrite && <button className="btn btn-primary btn-sm" onClick={saveFile} disabled={!isModified}><Save size={12} /> 保存</button>}
+                {!canWrite && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>只读</span>}
               </div>
             </div>
             <textarea
-              value={content} onChange={e => setContent(e.target.value)}
-              style={{ flex: 1, width: '100%', resize: 'none', border: 'none', borderRadius: 0, background: 'var(--bg-input)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.7, padding: '12px 16px', outline: 'none', tabSize: 2 }}
+              value={content} onChange={e => canWrite && setContent(e.target.value)}
+              readOnly={!canWrite}
+              style={{ flex: 1, width: '100%', resize: 'none', border: 'none', borderRadius: 0, background: 'var(--bg-input)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.7, padding: '12px 16px', outline: 'none', tabSize: 2, cursor: canWrite ? 'text' : 'default' }}
               spellCheck={false}
             />
           </>

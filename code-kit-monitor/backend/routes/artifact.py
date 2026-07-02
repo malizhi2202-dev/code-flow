@@ -2,6 +2,7 @@
 import os
 from fastapi import APIRouter, HTTPException, Request
 from config import get_specs_dir
+from auth import get_current_user, has_permission, write_audit
 
 router = APIRouter()
 SAFE_NAMES = {'CHANGE', 'REQUIREMENT', 'DESIGN', 'UI-DESIGN', 'TASK', 'TEST', 'REVIEW'}
@@ -28,7 +29,11 @@ async def get_artifact(change_id: str, artifact: str):
 
 @router.put("/api/changes/{change_id}/{artifact}")
 async def update_artifact(change_id: str, artifact: str, request: Request):
-    """编辑产物文件."""
+    """编辑产物文件（需要 project:write 权限）。"""
+    user = get_current_user(request)
+    if not has_permission(user, "project:write"):
+        raise HTTPException(status_code=403, detail="需要权限: project:write")
+
     allowed = artifact.upper() in SAFE_NAMES or any(p in artifact.upper() for p in SAFE_PATTERNS)
     if not allowed:
         raise HTTPException(400, f"unknown artifact: {artifact}")
@@ -51,5 +56,7 @@ async def update_artifact(change_id: str, artifact: str, request: Request):
             # 写入
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
+            write_audit(user, "project:write", f"{change_id}/{artifact}", "artifact",
+                        f"编辑产物 {artifact}", request=request)
             return {"ok": True, "artifact": fname, "size": len(new_content)}
     raise HTTPException(404, f"artifact '{artifact}' not found in change '{change_id}'")

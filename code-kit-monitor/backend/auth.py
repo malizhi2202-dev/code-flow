@@ -89,7 +89,8 @@ PERMISSION_DEFS = {
 
 ROLE_PERMISSIONS = {
     "admin": ["project:read", "project:write", "project:delete", "workflow:stop", "user:manage", "audit:view"],
-    "user":  ["project:read", "project:write"],
+    # user 角色无任何默认权限 — 全部由 admin 通过 custom_permissions 显式分配
+    "user":  [],
 }
 
 # 审计日志轮转阈值（行数）
@@ -188,28 +189,39 @@ def get_current_user(request: Request) -> dict:
 # ── 权限检查 ──────────────────────────────────────────────
 
 def has_permission(user: dict, permission: str) -> bool:
-    """检查用户是否有指定权限（角色权限 + 自定义权限）。"""
+    """检查用户是否有指定权限。
+    admin 角色直接放行全部权限；普通用户只看 custom_permissions 显式分配。
+    """
     if not user or not user.get("active"):
         return False
-    role = user.get("role", "user")
-    allowed = set(ROLE_PERMISSIONS.get(role, []))
-    # 加上用户自定义权限
-    for p in user.get("custom_permissions", []):
-        allowed.add(p)
-    return permission in allowed
+    # admin 豁免：始终拥有全部权限
+    if user.get("role") == "admin":
+        return True
+    # 普通用户：只看显式分配的权限
+    return permission in user.get("custom_permissions", [])
 
 
 def get_user_permissions(user: dict) -> dict:
-    """返回用户完整权限信息，用于前端展示。"""
+    """返回用户完整权限信息，用于前端展示。
+    admin: 全权限（标记 all=true）；普通用户: 仅 custom_permissions。
+    """
     role = user.get("role", "user")
-    base = set(ROLE_PERMISSIONS.get(role, []))
-    custom = set(user.get("custom_permissions", []))
-    all_perms = base | custom
+    if role == "admin":
+        return {
+            "role": "admin",
+            "all": True,
+            "base_permissions": sorted(ROLE_PERMISSIONS["admin"]),
+            "custom_permissions": [],
+            "effective_permissions": sorted(ROLE_PERMISSIONS["admin"]),
+            "available_permissions": PERMISSION_DEFS,
+        }
+    custom = sorted(user.get("custom_permissions", []))
     return {
         "role": role,
-        "base_permissions": sorted(base),
-        "custom_permissions": sorted(custom),
-        "effective_permissions": sorted(all_perms),
+        "all": False,
+        "base_permissions": [],
+        "custom_permissions": custom,
+        "effective_permissions": custom,
         "available_permissions": PERMISSION_DEFS,
     }
 
