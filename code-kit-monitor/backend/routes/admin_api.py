@@ -144,6 +144,24 @@ async def write_file(path: str, request: Request):
 # 项目隔离
 # ═══════════════════════════════════════════
 
+@router.get("/api/admin/file-names")
+async def get_file_names():
+    """获取文件中文名映射."""
+    mapping_file = os.path.join(get_specs_dir(), "file-names.json")
+    if os.path.exists(mapping_file):
+        return json.load(open(mapping_file, encoding="utf-8"))
+    return {}
+
+
+@router.put("/api/admin/file-names")
+async def update_file_names(request: Request):
+    """保存文件中文名映射."""
+    mapping_file = os.path.join(get_specs_dir(), "file-names.json")
+    body = await request.json()
+    json.dump(body, open(mapping_file, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    return {"ok": True}
+
+
 @router.get("/api/admin/projects")
 async def list_projects():
     return {"projects": discover_projects(), "current": CURRENT_PROJECT}

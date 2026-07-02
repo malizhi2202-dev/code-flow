@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FileText, Save, X, Edit3, ChevronRight, Clock, FolderOpen } from 'lucide-react';
+import { artifactName } from '../hooks/useFileNames';
 
 const STAGES = [
   { id: '0-change', name: '变更提案', file: 'CHANGE.md' },
@@ -124,7 +125,7 @@ export default function SpecsEditor({ onSelect }: { onSelect: (id: string) => vo
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <FileText size={13} style={{ color: STAGE_COLORS[activeStage], flexShrink: 0 }} />
                   <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                    {a.fname}
+                    {artifactName(a.fname)}
                   </span>
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Save, Edit3, X, FileText, ChevronRight } from 'lucide-react';
+import { artifactName } from '../hooks/useFileNames';
 import ConfirmDialog from './ConfirmDialog';
 
 const STAGE_MAP: Record<string, { stage: string; name: string; order: number }> = {
@@ -92,7 +93,7 @@ export default function ArtifactTab({ changeId, artifacts }: { changeId: string;
               }}
             >
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: STAGE_COLORS[si.stage] || 'var(--text-muted)', flexShrink: 0 }} />
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fname}</span>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--font)' }}>{artifactName(fname)}</span>
               {!isSummary && (
                 <span style={{ fontSize: 9, color: STAGE_COLORS[si.stage] || 'var(--text-muted)', fontFamily: 'var(--font)', whiteSpace: 'nowrap' }}>
                   {si.stage}

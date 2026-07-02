@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Trash2, Save, ChevronUp, ChevronDown, Edit3, Settings, X, Users, GitBranch } from 'lucide-react';
+import { cn, useFileNames } from '../hooks/useFileNames';
 
 interface Stage { id: string; name: string; gate: string | null; prompt: string; order: number; }
 interface Gate { id: string; name: string; experts: string[]; }
@@ -13,8 +14,10 @@ export default function WorkflowEditor() {
   const [showAddStage, setShowAddStage] = useState(false);
   const [newStage, setNewStage] = useState({ id: '', name: '', gate: '', prompt: '' });
   const [saved, setSaved] = useState(false);
+  const { map: nameMap, fetch: fetchNames } = useFileNames();
 
   useEffect(() => {
+    fetchNames();
     fetch('/api/admin/workflow').then(r => r.json()).then(d => {
       setWf(d.workflow); setAllRoles(d.all_roles || []);
     });
@@ -105,7 +108,7 @@ export default function WorkflowEditor() {
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 600 }}>{stage.id}</span>
                   <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{stage.name}</span>
                   {stage.gate && <span className="badge badge-purple">{stage.gate}</span>}
-                  <span style={{ fontSize: 11, color: 'var(--text-weak)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>{stage.prompt}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-weak)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>{cn(stage.prompt, nameMap)}</span>
                   <div style={{ display: 'flex', gap: 2, marginLeft: 4 }}>
                     <button className="btn btn-ghost btn-sm" onClick={() => moveStage(i, -1)} disabled={i === 0}><ChevronUp size={12} /></button>
                     <button className="btn btn-ghost btn-sm" onClick={() => moveStage(i, 1)} disabled={i === wf.stages.length - 1}><ChevronDown size={12} /></button>

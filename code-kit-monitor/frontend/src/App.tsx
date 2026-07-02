@@ -15,7 +15,7 @@ const NAV: NavItem[] = [
   { id: 'specs', label: '产物', icon: <Layers size={16} /> },
   { id: 'workflow', label: '工作流', icon: <GitBranch size={16} /> },
   { id: 'roles', label: '角色', icon: <Users size={16} /> },
-  { id: 'docs', label: '文档', icon: <FileText size={16} /> },
+  { id: 'docs', label: '流程引擎', icon: <FileText size={16} /> },
 ];
 
 type View =
@@ -76,6 +76,11 @@ export default function App() {
           {!collapsed && <span style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>code-kit</span>}
         </div>
 
+        {/* 项目切换 */}
+        <div style={{ padding: '8px', borderBottom: '1px solid var(--border)' }}>
+          <ProjectSwitcher collapsed={collapsed} />
+        </div>
+
         {/* 导航 */}
         <nav style={{ flex: 1, padding: '8px' }}>
           {NAV.map(item => (
@@ -100,9 +105,8 @@ export default function App() {
           ))}
         </nav>
 
-        {/* 底部：项目切换 + 状态 + 折叠 */}
+        {/* 底部：状态 + 折叠 */}
         <div style={{ padding: '8px', borderTop: '1px solid var(--border)' }}>
-          <ProjectSwitcher collapsed={collapsed} />
           {!collapsed && summary && (
             <div style={{ padding: '4px 8px', marginBottom: 6, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
               <div><span className="dot dot-green" style={{ marginRight: 4 }} />{summary.active_changes} active</div>

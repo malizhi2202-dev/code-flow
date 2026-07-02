@@ -6,11 +6,10 @@ interface Project { name: string; root: string; has_specs: boolean; is_current: 
 export default function ProjectSwitcher({ collapsed }: { collapsed: boolean }) {
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [current, setCurrent] = useState('');
 
   const fetchProjects = () => {
     fetch('/api/admin/projects').then(r => r.json()).then(d => {
-      setProjects(d.projects || []); setCurrent(d.current || '');
+      setProjects(d.projects || []);
     });
   };
 
@@ -18,11 +17,12 @@ export default function ProjectSwitcher({ collapsed }: { collapsed: boolean }) {
 
   const switchProject = async (root: string) => {
     await fetch('/api/admin/projects/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ root }) });
-    setOpen(false); fetchProjects();
+    setOpen(false);
     window.location.reload();
   };
 
-  const curName = current.split('/').pop() || '?';
+  const currentProject = projects.find(p => p.is_current);
+  const curName = currentProject?.name || (projects[0]?.name ?? '?');
 
   return (
     <div style={{ position: 'relative' }}>
@@ -40,7 +40,7 @@ export default function ProjectSwitcher({ collapsed }: { collapsed: boolean }) {
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setOpen(false)} />
           <div style={{
-            position: 'absolute', bottom: '100%', left: 0, marginBottom: 4,
+            position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 100,
             background: 'var(--bg-card)', border: '1px solid var(--border-strong)',
             borderRadius: 'var(--r-md)', minWidth: 180, zIndex: 100,
             boxShadow: 'var(--shadow-md)', padding: 4,
