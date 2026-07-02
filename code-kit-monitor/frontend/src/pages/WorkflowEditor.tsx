@@ -71,7 +71,7 @@ export default function WorkflowEditor() {
 
   return (
     
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '20px 24px' }}>
+      <div style={{ padding: '20px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, fontFamily: 'var(--font-mono)' }}>工作流编辑器</h1>

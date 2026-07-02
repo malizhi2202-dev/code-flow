@@ -31,7 +31,7 @@ export default function Roles() {
   const toggleGate = (gates: string[], gate: string) => gates.includes(gate) ? gates.filter(g => g !== gate) : [...gates, gate];
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '20px 24px' }}>
+    <div style={{ padding: '20px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h1 style={{ fontFamily: 'var(--font-mono)', fontSize: 20, fontWeight: 700, margin: 0 }}>角色管理</h1>

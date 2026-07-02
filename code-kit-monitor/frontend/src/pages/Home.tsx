@@ -21,7 +21,7 @@ export default function Home({ onSelect }: { onSelect: (id: string) => void }) {
   }
 
   return (
-    <div style={{ padding: '20px 24px', maxWidth: 1400, margin: '0 auto' }}>
+    <div style={{ padding: '20px 24px' }}>
       {/* 统计 */}
       {s && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 20 }}>

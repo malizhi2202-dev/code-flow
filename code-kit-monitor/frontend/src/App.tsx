@@ -5,12 +5,14 @@ import Detail from './pages/Detail';
 import Roles from './pages/Roles';
 import WorkflowEditor from './pages/WorkflowEditor';
 import DocEditor from './pages/DocEditor';
+import SpecsEditor from './pages/SpecsEditor';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ErrorBoundary from './components/ErrorBoundary';
 
 type NavItem = { id: string; label: string; icon: React.ReactNode };
 const NAV: NavItem[] = [
   { id: 'home', label: '监控', icon: <Activity size={16} /> },
+  { id: 'specs', label: '产物', icon: <Layers size={16} /> },
   { id: 'workflow', label: '工作流', icon: <GitBranch size={16} /> },
   { id: 'roles', label: '角色', icon: <Users size={16} /> },
   { id: 'docs', label: '文档', icon: <FileText size={16} /> },
@@ -19,6 +21,7 @@ const NAV: NavItem[] = [
 type View =
   | { page: 'home' }
   | { page: 'detail'; changeId: string }
+  | { page: 'specs' }
   | { page: 'workflow' }
   | { page: 'roles' }
   | { page: 'docs' };
@@ -50,13 +53,14 @@ export default function App() {
       case 'home': return <Home onSelect={openDetail} />;
       case 'workflow': return <WorkflowEditor />;
       case 'roles': return <Roles />;
+      case 'specs': return <SpecsEditor onSelect={(id) => setDetailId(id)} />;
       case 'docs': return <DocEditor />;
       default: return <Home onSelect={openDetail} />;
     }
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', width: '100vw' }}>
       {/* ── 左侧边栏 ── */}
       <aside style={{
         width: collapsed ? 48 : 200,

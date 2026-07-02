@@ -62,12 +62,13 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 14px; -webkit-font-smoothing: antialiased; }
 body {
+  margin: 0;
   background: var(--bg-app);
   color: var(--text);
   font-family: var(--font);
   line-height: 1.5;
 }
-#root { height: 100vh; display: flex; }
+#root { width: 100vw; height: 100vh; }
 ::selection { background: var(--blue-bg); }
 
 /* ── 滚动条 ── */

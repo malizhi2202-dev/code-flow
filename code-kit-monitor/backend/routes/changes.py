@@ -21,6 +21,7 @@ async def list_changes():
             'total_days': c.total_days,
             'task_stats': c.task_stats, 'gate_stats': c.gate_stats,
             'next_action': c.next_action, 'blockers': c.blockers,
+            'artifacts': c.artifacts,
             'v1_count': len(c.v1_items), 'v2_count': len(c.v2_items), 'risk_count': len(c.risks),
         })
 
