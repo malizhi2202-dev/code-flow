@@ -2,7 +2,7 @@
 import os
 from fastapi import APIRouter
 from scanner import FileScanner, _count_tasks, _count_done_tasks
-from config import SPECS_DIR
+from config import get_specs_dir
 from parsers.section import SectionParser
 
 router = APIRouter()
@@ -13,7 +13,7 @@ _scanner = FileScanner()
 async def health_check():
     issues = []
     for c in _scanner.scan(force=True):
-        change_dir = os.path.join(SPECS_DIR, c.id)
+        change_dir = os.path.join(get_specs_dir(), c.id)
         # 已完成 task 数 vs SUMMARY 数（只检查 done 的 task）
         done_tasks = _count_done_tasks(change_dir)
         summaries = len([f for f in c.artifacts if f.endswith('-SUMMARY.md')])

@@ -5,7 +5,7 @@ from scanner import FileScanner, STAGE_NAMES, _phase_order
 from parsers.section import SectionParser
 from parsers.task import parse_tasks
 from parsers.gate import parse_gates
-from config import SPECS_DIR
+from config import get_specs_dir
 
 router = APIRouter()
 _scanner = FileScanner()
@@ -23,7 +23,7 @@ async def get_change(change_id: str):
     info = _scanner.get_change(change_id)
     if not info:
         raise HTTPException(404, f"change '{change_id}' not found")
-    change_dir = os.path.join(SPECS_DIR, change_id)
+    change_dir = os.path.join(get_specs_dir(), change_id)
 
     # ── 门禁投票详情 ──
     gates = []

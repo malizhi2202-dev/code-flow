@@ -11,6 +11,8 @@ from routes.health import router as health_router
 from routes.token_usage import router as token_router
 from routes.git_safety import router as git_router
 from routes.search import router as search_router
+from routes.roles_api import router as roles_router
+from routes.admin_api import router as admin_router
 
 
 @asynccontextmanager
@@ -47,6 +49,8 @@ app.include_router(health_router)
 app.include_router(token_router)
 app.include_router(git_router)
 app.include_router(search_router)
+app.include_router(roles_router)
+app.include_router(admin_router)
 
 
 @app.get("/api/ping")

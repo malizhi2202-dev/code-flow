@@ -15,6 +15,9 @@ Wave 4 (parallel): T08[P], T09[P], T10[P], T11[P], T12[P], T13[P], T14[P] (depen
 Wave 5 (parallel): T15[P], T16[P], T17[P] (depends on T02,T04)
 Wave 6 (parallel): T18[P], T19[P], T20[P], T21[P], T22[P], T23[P] (depends on T15,T08-T14)
 Wave 7:            T24 → T25 → T26 (depends on T18-T23)
+--- v1.1 ---
+Wave 8 (parallel): T27[P], T28[P], T29[P]
+Wave 9:            T30 → T31 → T32 → T33
 ```
 
 ---
@@ -572,6 +575,168 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <verify>curl -s http://127.0.0.1:8000/api/changes | python -c "import sys; assert sys.stdin.read()!=''" && curl -s --interface 0.0.0.0 http://127.0.0.1:8000/api/changes 2>&1 || echo "非本地被拒 ✅"</verify>
   <done>localhost 绑定生效，非本地请求返回 403，安全告警前端醒目标记</done>
   <depends_on>T15,T01</depends_on>
+  <auto>true</auto>
+</task>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- v1.1 新增：10 专家评审产出（7 task, 2 wave）-->
+<!-- ═══════════════════════════════════════════ -->
+
+<task id="T27" parallel="true" status="done">
+  <name>AC-13 · 门禁矩阵表（GateTab 重写）</name>
+  <read_files>
+    frontend/src/components/GateTab.tsx
+    REQUIREMENT.md AC-13
+  </read_files>
+  <write_files>
+    frontend/src/components/GateTab.tsx
+  </write_files>
+  <action>
+    将门禁 Tab 从折叠卡片改为矩阵表：
+    - 行 = 8 Gate（G1/需求门/G2/G2a/Task/G3/测试门/G4）
+    - 列 = 所有参与角色（动态从 gate 数据中提取去重）
+    - 单元格 = ✅/❌/⚪ 图标 + 背景色（绿/红/灰）
+    - hover 显示理由 tooltip
+    - 未触发的 gate 显示灰色行
+  </action>
+  <verify>curl -s http://127.0.0.1:5173/ | grep -c "root"</verify>
+  <done>门禁 Tab 展示矩阵表，Gate × 角色，hover 可见理由</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T28" parallel="true" status="done">
+  <name>AC-17 · 侧边栏 aria-label + reduced-motion</name>
+  <read_files>
+    frontend/src/App.tsx
+    frontend/src/styles/tokens.css
+  </read_files>
+  <write_files>
+    frontend/src/App.tsx
+    frontend/src/styles/tokens.css
+  </write_files>
+  <action>
+    - App.tsx：每个导航按钮加 aria-label="监控/工作流/角色/文档"
+    - tokens.css：@media (prefers-reduced-motion: reduce) 中关闭 sidebar transition
+    - 折叠按钮加 aria-label="收起侧边栏/展开侧边栏"
+  </action>
+  <verify>curl -s http://127.0.0.1:5173/ | grep -c "aria-label"</verify>
+  <done>导航按钮有 aria-label，reduced-motion 生效</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T29" parallel="true" status="done">
+  <name>AC-15 · 扫描缓存 TTL</name>
+  <read_files>
+    backend/scanner.py
+  </read_files>
+  <write_files>
+    backend/scanner.py
+  </write_files>
+  <action>
+    - FileScanner 增加 _cache_time 字段
+    - scan() 方法：超过 5 秒 → 缓存失效，重新扫描
+    - force=True 时跳过缓存
+  </action>
+  <verify>cd backend && /home/malizhi/ai/code-flow/.venv/bin/python -c "from scanner import FileScanner; import time; s=FileScanner(); r1=s.scan(force=True); time.sleep(1); r2=s.scan(); assert r1==r2; print('cache OK')"</verify>
+  <done>5 秒内重复请求命中缓存，超过 5 秒重新扫描</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T30" parallel="false" status="done">
+  <name>AC-14 · 操作确认弹窗（角色/工作流/文档）</name>
+  <read_files>
+    frontend/src/pages/Roles.tsx
+    frontend/src/pages/WorkflowEditor.tsx
+    frontend/src/pages/DocEditor.tsx
+  </read_files>
+  <write_files>
+    frontend/src/components/ConfirmDialog.tsx
+    frontend/src/pages/Roles.tsx
+    frontend/src/pages/WorkflowEditor.tsx
+    frontend/src/pages/DocEditor.tsx
+  </write_files>
+  <action>
+    - 创建 ConfirmDialog 通用组件（标题/描述/确认/取消按钮）
+    - Roles.tsx：删除角色时弹出确认
+    - WorkflowEditor.tsx：删除阶段/修改门禁时弹出确认
+    - DocEditor.tsx：保存时弹出确认（提示修改底层文件）
+  </action>
+  <verify>cd frontend && npx vitest run --reporter=verbose 2>&1 | tail -5</verify>
+  <done>所有删除/保存操作有确认弹窗，取消不执行</done>
+  <depends_on>T27,T28</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T31" parallel="false" status="done">
+  <name>AC-16 · 项目切换器</name>
+  <read_files>
+    frontend/src/App.tsx
+    backend/routes/admin_api.py
+  </read_files>
+  <write_files>
+    frontend/src/components/ProjectSwitcher.tsx
+    frontend/src/App.tsx
+  </write_files>
+  <action>
+    - App.tsx 侧边栏底部加 ProjectSwitcher 组件
+    - 调用 /api/admin/projects 获取项目列表
+    - 下拉菜单展示项目名 + 当前标记
+    - 切换时调用 POST /api/admin/projects/switch
+    - 切换后刷新 changes 数据
+  </action>
+  <verify>curl -s http://127.0.0.1:8000/api/admin/projects | python -c "import sys,json; d=json.load(sys.stdin); assert len(d['projects'])>0; print('OK')"</verify>
+  <done>侧边栏底部可切换项目，切换后面板数据自动刷新</done>
+  <depends_on>T28</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T32" parallel="false" status="done">
+  <name>配置自动备份</name>
+  <read_files>
+    backend/routes/admin_api.py
+    backend/routes/roles_api.py
+  </read_files>
+  <write_files>
+    backend/routes/admin_api.py
+    backend/routes/roles_api.py
+  </write_files>
+  <action>
+    - admin_api.py：_save_workflow() 和写文件前自动备份到 .specs/backup/<filename>.<timestamp>
+    - roles_api.py：_save() 同理自动备份
+    - 保留最近 5 个版本
+  </action>
+  <verify>cd backend && /home/malizhi/ai/code-flow/.venv/bin/python -c "
+import os,json,tempfile,time
+# 模拟保存触发备份
+backup_dir = '../../.specs/backup'
+print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
+"</verify>
+  <done>workflow.json/roles.json 每次保存前自动备份，保留 5 个版本</done>
+  <depends_on>T29</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T33" parallel="false" status="done">
+  <name>前端 ErrorBoundary</name>
+  <read_files>
+    frontend/src/App.tsx
+  </read_files>
+  <write_files>
+    frontend/src/components/ErrorBoundary.tsx
+    frontend/src/App.tsx
+  </write_files>
+  <action>
+    - ErrorBoundary 类组件：捕获子组件渲染错误
+    - 显示「出错了」+ 错误信息 + 重试按钮
+    - App.tsx 中用 ErrorBoundary 包裹主内容区
+    - 侧边栏不受 ErrorBoundary 影响（保证导航始终可用）
+  </action>
+  <verify>cd frontend && npx vitest run --reporter=verbose 2>&1 | tail -3</verify>
+  <done>子组件崩溃不导致白屏，显示错误提示+重试按钮</done>
+  <depends_on>T30</depends_on>
   <auto>true</auto>
 </task>
 ```

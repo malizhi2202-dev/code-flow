@@ -1,66 +1,71 @@
-import { AlertTriangle, Clock, CheckCircle, ListChecks, Shield } from 'lucide-react';
+import { AlertTriangle, Clock, Shield, Bot, UserCheck, ArrowRight, FileText } from 'lucide-react';
 import type { ChangeItem } from '../stores/changes';
 
-const STATUS_STYLE: Record<string, { border: string; bg: string; label: string }> = {
-  interrupted: { border: 'var(--color-danger)', bg: 'var(--color-elevated)', label: '🔴 中断' },
-  blocked: { border: 'var(--color-warning)', bg: 'var(--color-surface)', label: '⚠️ 阻塞' },
-  normal: { border: 'transparent', bg: 'var(--color-surface)', label: '' },
-};
-
-const PRIORITY_LABEL: Record<string, string> = { '完整': '🟢 完整', '中等': '🟡 中等', '最短': '🔵 最短' };
-
-export default function ChangeCard({ change, onSelect }: { change: ChangeItem; onSelect: (id: string) => void }) {
-  const style = STATUS_STYLE[change.status] || STATUS_STYLE.normal;
-  const [done, total] = change.progress.split('/').map(Number);
-  const gs = change.gate_stats;
+export default function ChangeCard({ change: c, onSelect }: { change: ChangeItem; onSelect: (id: string) => void }) {
+  const isInterrupted = c.status === 'interrupted';
+  const isBlocked = c.status === 'blocked';
+  const isDone = c.progress_pct === 100;
+  const gs = c.gate_stats;
+  const ts = c.task_stats;
 
   return (
     <div
-      onClick={() => onSelect(change.id)}
-      className={change.status === 'interrupted' ? 'pulse-border' : ''}
+      onClick={() => onSelect(c.id)}
+      className="card card-clickable"
       style={{
-        background: style.bg, borderLeft: `3px solid ${style.border}`, borderRadius: 'var(--radius-md)',
-        padding: 14, cursor: 'pointer', transition: 'transform var(--duration-micro) var(--easing-standard), box-shadow var(--duration-micro) var(--easing-standard)',
-        boxShadow: 'var(--shadow-none)',
+        ...(isInterrupted ? { borderLeft: '3px solid var(--red)', animation: 'pulse-red 2s ease-in-out infinite' } : {}),
+        ...(isBlocked && !isInterrupted ? { borderLeft: '3px solid var(--orange)' } : {}),
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = 'var(--shadow-none)'; }}
-      role="button" tabIndex={0} aria-label={`${change.id} - ${change.phase_name}`}
-      onKeyDown={(e) => { if (e.key === 'Enter') onSelect(change.id); }}
+      role="button" tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter') onSelect(c.id); }}
     >
       {/* 头部 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        {change.interrupted && <AlertTriangle size={14} color="var(--color-danger)" />}
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600 }}>{change.id}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 10, fontFamily: 'var(--font-display)', color: 'var(--color-text-secondary)', background: 'var(--color-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>{change.phase_name}</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {isInterrupted && <AlertTriangle size={14} style={{ color: 'var(--red)', flexShrink: 0 }} />}
+          <span style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.id}</span>
+        </div>
+        <span className={`badge ${isDone ? 'badge-green' : isInterrupted ? 'badge-red' : isBlocked ? 'badge-orange' : 'badge-blue'}`} style={{ flexShrink: 0, marginLeft: 8 }}>
+          {c.phase_name}
+        </span>
       </div>
 
       {/* 进度条 */}
-      {total > 0 && (
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-dim)', marginBottom: 3 }}>
-            <span>{change.progress} task</span>
-            <span>{change.progress_pct}%</span>
+      {ts.total > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-weak)' }}>{c.progress}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: isDone ? 'var(--green)' : 'var(--blue)' }}>{c.progress_pct}%</span>
           </div>
-          <div style={{ height: 3, background: 'var(--color-grid)', borderRadius: 2, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${change.progress_pct}%`, background: change.interrupted ? 'var(--color-danger)' : 'var(--color-primary)', transition: 'width var(--duration-standard) var(--easing-standard)' }} />
+          <div className="progress-track">
+            <div className="progress-fill" style={{ width: `${c.progress_pct}%`, background: isDone ? 'var(--green)' : isInterrupted ? 'var(--red)' : 'var(--blue)' }} />
           </div>
         </div>
       )}
 
-      {/* 关键指标行 */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11, color: 'var(--color-text-secondary)' }}>
-        {change.total_days != null && <span title="已进行天数"><Clock size={11} style={{ verticalAlign: 'middle', marginRight: 2 }} />{change.total_days}d</span>}
-        <span title="门禁通过/总数"><Shield size={11} style={{ verticalAlign: 'middle', marginRight: 2 }} />{gs.passed}/{gs.total} gate</span>
-        <span title="自动化task"><ListChecks size={11} style={{ verticalAlign: 'middle', marginRight: 2 }} />{change.task_stats.auto}🤖 {change.task_stats.manual}👤</span>
-        {change.v1_count > 0 && <span title="v1范围">{change.v1_count} v1</span>}
-        {change.risk_count > 0 && <span title="风险数" style={{ color: 'var(--color-warning)' }}>⚠️ {change.risk_count}</span>}
+      {/* 指标 */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12, marginBottom: 8 }}>
+        <Metric icon={<Clock size={12} />} text={`${c.total_days ?? '?'}d`} />
+        <Metric icon={<Shield size={12} />} text={`${gs.passed}/${gs.total}`} active={gs.passed === gs.total && gs.total > 0} />
+        <Metric icon={<Bot size={12} />} text={`${ts.auto}`} />
+        {ts.manual > 0 && <Metric icon={<UserCheck size={12} />} text={`${ts.manual}`} warn />}
+        {c.v1_count > 0 && <Metric icon={<FileText size={12} />} text={`${c.v1_count}`} />}
+        {c.risk_count > 0 && <Metric icon={<AlertTriangle size={12} />} text={`${c.risk_count}`} warn />}
       </div>
 
       {/* 下一步 */}
-      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--color-text-dim)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        → {change.next_action}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-weak)', borderTop: '1px solid var(--border-weak)', paddingTop: 8 }}>
+        <ArrowRight size={11} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.next_action}</span>
       </div>
     </div>
+  );
+}
+
+function Metric({ icon, text, active, warn }: { icon: React.ReactNode; text: string; active?: boolean; warn?: boolean }) {
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: warn ? 'var(--orange)' : active ? 'var(--green)' : 'var(--text-weak)', fontFamily: 'var(--font-mono)' }}>
+      {icon} {text}
+    </span>
   );
 }

@@ -5,7 +5,9 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
-from config import SPECS_DIR
+from config import get_specs_dir, CURRENT_PROJECT
+
+CACHE_TTL = 5.0  # 缓存 5 秒过期
 
 STAGES = ['0-change', '1-requirement', '2-design', '2a-ui-design', '3-task', '4-dev', '5-test', '6-review', '7-integration']
 STAGE_FILES = {
@@ -173,7 +175,7 @@ def _next_action(info: 'ChangeInfo') -> str:
     if idx < len(STAGES) - 1:
         next_stage = STAGES[idx + 1]
         if '4-dev' in info.phase:
-            total, done, _, _ = _count_tasks(os.path.join(SPECS_DIR, info.id))
+            total, done, _, _ = _count_tasks(os.path.join(get_specs_dir(), info.id))
             pending = total - done
             if pending > 0: return f'还有 {pending} 个 task 待执行 — @code-kit/GO.md 执行 T<NN>'
             return '全部 task 完成 — 运行 G3 门禁后进入 5-test'
@@ -182,13 +184,20 @@ def _next_action(info: 'ChangeInfo') -> str:
 
 
 class FileScanner:
-    def __init__(self, specs_dir: str = SPECS_DIR):
-        self.specs_dir = specs_dir
+    def __init__(self, specs_dir: str = None):
+        self._specs_dir = specs_dir
         self._cache: list[ChangeInfo] = []
         self._cache_valid = False
+        self._cache_time: float = 0.0
+
+    @property
+    def specs_dir(self):
+        return self._specs_dir or get_specs_dir()
 
     def scan(self, force: bool = False) -> list[ChangeInfo]:
-        if self._cache_valid and not force: return self._cache
+        # 缓存 TTL 检查
+        if self._cache_valid and not force and (time.time() - self._cache_time) < CACHE_TTL:
+            return self._cache
         changes = []
         if not os.path.isdir(self.specs_dir): self._cache = []; self._cache_valid = True; return []
         for entry in sorted(os.listdir(self.specs_dir)):
@@ -269,7 +278,7 @@ class FileScanner:
             info.next_action = _next_action(info)
             changes.append(info)
         changes.sort(key=lambda c: (-c.interrupted, -c.progress_pct, _phase_order(c.phase)))
-        self._cache = changes; self._cache_valid = True
+        self._cache = changes; self._cache_valid = True; self._cache_time = time.time()
         return changes
 
     def get_change(self, change_id: str) -> Optional[ChangeInfo]:

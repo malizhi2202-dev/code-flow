@@ -1,7 +1,7 @@
 """GET /api/changes/<id>/<artifact> — 产物内容."""
 import os
 from fastapi import APIRouter, HTTPException
-from config import SPECS_DIR
+from config import get_specs_dir
 
 router = APIRouter()
 SAFE_NAMES = {'CHANGE', 'REQUIREMENT', 'DESIGN', 'UI-DESIGN', 'TASK', 'TEST', 'REVIEW'}
@@ -13,7 +13,7 @@ async def get_artifact(change_id: str, artifact: str):
         raise HTTPException(400, f"unknown artifact: {artifact}")
     if '..' in change_id or '/' in change_id:
         raise HTTPException(400, "invalid change_id")
-    change_dir = os.path.join(SPECS_DIR, change_id)
+    change_dir = os.path.join(get_specs_dir(), change_id)
     if not os.path.isdir(change_dir):
         raise HTTPException(404, f"change '{change_id}' not found")
     for fname in os.listdir(change_dir):

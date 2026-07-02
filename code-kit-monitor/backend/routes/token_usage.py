@@ -3,7 +3,7 @@ import os
 import re
 from datetime import date
 from fastapi import APIRouter
-from config import SPECS_DIR
+from config import get_specs_dir
 
 router = APIRouter()
 
@@ -12,10 +12,10 @@ def _scan_token_usage() -> dict:
     today = date.today().isoformat()
     total_today = 0
     per_change = {}
-    if not os.path.isdir(SPECS_DIR):
+    if not os.path.isdir(get_specs_dir()):
         return {"total_today": 0, "per_change": {}}
-    for entry in os.listdir(SPECS_DIR):
-        path = os.path.join(SPECS_DIR, entry)
+    for entry in os.listdir(get_specs_dir()):
+        path = os.path.join(get_specs_dir(), entry)
         if not os.path.isdir(path) or entry.startswith('.'):
             continue
         change_total = 0
