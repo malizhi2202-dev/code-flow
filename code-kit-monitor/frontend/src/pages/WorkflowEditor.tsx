@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Trash2, Save, ChevronUp, ChevronDown, Edit3, Settings, X, Users, GitBranch } from 'lucide-react';
-import { cn, useFileNames } from '../hooks/useFileNames';
+import { cn, gateDisplay, useFileNames } from '../hooks/useFileNames';
 
 interface Stage { id: string; name: string; gate: string | null; prompt: string; order: number; }
 interface Gate { id: string; name: string; experts: string[]; }
@@ -89,7 +89,7 @@ export default function WorkflowEditor() {
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
               <div><label style={{ fontSize: 11, color: 'var(--text-weak)' }}>阶段 ID</label><br /><input placeholder="如: 8-deploy" value={newStage.id} onChange={e => setNewStage({ ...newStage, id: e.target.value })} style={{ width: 160, marginTop: 2 }} /></div>
               <div><label style={{ fontSize: 11, color: 'var(--text-weak)' }}>名称</label><br /><input placeholder="如: 部署上线" value={newStage.name} onChange={e => setNewStage({ ...newStage, name: e.target.value })} style={{ width: 140, marginTop: 2 }} /></div>
-              <div><label style={{ fontSize: 11, color: 'var(--text-weak)' }}>关联 Gate</label><br /><select value={newStage.gate} onChange={e => setNewStage({ ...newStage, gate: e.target.value })} style={{ width: 140, marginTop: 2 }}><option value="">无</option>{wf.gates.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></div>
+              <div><label style={{ fontSize: 11, color: 'var(--text-weak)' }}>关联 Gate</label><br /><select value={newStage.gate} onChange={e => setNewStage({ ...newStage, gate: e.target.value })} style={{ width: 140, marginTop: 2 }}><option value="">无</option>{wf.gates.map(g => <option key={g.id} value={g.id}>{gateDisplay(g.name)}</option>)}</select></div>
               <div><label style={{ fontSize: 11, color: 'var(--text-weak)' }}>Prompt 文件</label><br /><input placeholder="prompts/xxx.md" value={newStage.prompt} onChange={e => setNewStage({ ...newStage, prompt: e.target.value })} style={{ width: 180, marginTop: 2 }} /></div>
               <button className="btn btn-primary btn-sm" onClick={addStage}><Plus size={12} /> 追加到末尾</button>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowAddStage(false)}><X size={12} /></button>
@@ -130,7 +130,7 @@ export default function WorkflowEditor() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }} onClick={() => setEditingGate(isOpen ? null : gate.id)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span className="badge badge-purple">{gate.id}</span>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{gate.name}</span>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{gateDisplay(gate.name)}</span>
                       <span style={{ fontSize: 11, color: 'var(--text-weak)' }}>({gate.experts.length}人)</span>
                     </div>
                     <Edit3 size={12} style={{ color: 'var(--text-weak)' }} />

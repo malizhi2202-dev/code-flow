@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Save, Plus, Trash2, Edit3, X } from 'lucide-react';
+import { gateDisplay } from '../hooks/useFileNames';
 
 interface Role { id: string; name: string; emoji: string; gates: string[]; description: string; style: string; personality: string; }
 const ALL_GATES = ['G1', '需求门', 'G2', 'G2a', 'Task', 'G3', '测试门', 'G4'];
@@ -51,7 +52,7 @@ export default function Roles() {
             <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 8 }}>所属门禁:</span>
             {ALL_GATES.map(g => (
               <button key={g} onClick={() => setNewRole({ ...newRole, gates: toggleGate(newRole.gates || [], g) })}
-                className={`btn btn-xs ${(newRole.gates || []).includes(g) ? 'btn-primary' : ''}`} style={{ margin: 2 }}>{g}</button>
+                className={`btn btn-xs ${(newRole.gates || []).includes(g) ? 'btn-primary' : ''}`} style={{ margin: 2 }}>{gateDisplay(g)}</button>
             ))}
           </div>
           <textarea placeholder="描述" value={newRole.description || ''} onChange={e => setNewRole({ ...newRole, description: e.target.value })}
@@ -94,8 +95,8 @@ export default function Roles() {
               <div style={{ marginBottom: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {isEditing ? ALL_GATES.map(g => (
                   <button key={g} onClick={() => setEditForm({ ...editForm, gates: toggleGate(editForm.gates || [], g) })}
-                    className={`btn btn-xs ${(editForm.gates || []).includes(g) ? 'btn-primary' : ''}`}>{g}</button>
-                )) : (role.gates || []).map(g => <span key={g} className="badge badge-blue">{g}</span>)}
+                    className={`btn btn-xs ${(editForm.gates || []).includes(g) ? 'btn-primary' : ''}`}>{gateDisplay(g)}</button>
+                )) : (role.gates || []).map(g => <span key={g} className="badge badge-blue">{gateDisplay(g)}</span>)}
               </div>
               {isEditing ? (
                 <textarea value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })}

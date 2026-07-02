@@ -13,6 +13,7 @@ from routes.git_safety import router as git_router
 from routes.search import router as search_router
 from routes.roles_api import router as roles_router
 from routes.admin_api import router as admin_router
+from routes.runtime_api import router as runtime_router
 
 
 @asynccontextmanager
@@ -51,6 +52,7 @@ app.include_router(git_router)
 app.include_router(search_router)
 app.include_router(roles_router)
 app.include_router(admin_router)
+app.include_router(runtime_router)
 
 
 @app.get("/api/ping")

@@ -6,22 +6,25 @@ import Roles from './pages/Roles';
 import WorkflowEditor from './pages/WorkflowEditor';
 import DocEditor from './pages/DocEditor';
 import SpecsEditor from './pages/SpecsEditor';
+import Runtime from './pages/Runtime';
 import ProjectSwitcher from './components/ProjectSwitcher';
 import ErrorBoundary from './components/ErrorBoundary';
 
 type NavItem = { id: string; label: string; icon: React.ReactNode };
 const NAV: NavItem[] = [
-  { id: 'home', label: '监控', icon: <Activity size={16} /> },
-  { id: 'specs', label: '产物', icon: <Layers size={16} /> },
-  { id: 'workflow', label: '工作流', icon: <GitBranch size={16} /> },
-  { id: 'roles', label: '角色', icon: <Users size={16} /> },
-  { id: 'docs', label: '流程引擎', icon: <FileText size={16} /> },
+  { id: 'home', label: '项目看板', icon: <Activity size={16} /> },
+  { id: 'specs', label: '文档中心', icon: <Layers size={16} /> },
+  { id: 'runtime', label: '消耗统计', icon: <Activity size={16} /> },
+  { id: 'workflow', label: '流程配置', icon: <GitBranch size={16} /> },
+  { id: 'roles', label: '专家管理', icon: <Users size={16} /> },
+  { id: 'docs', label: '规则引擎', icon: <FileText size={16} /> },
 ];
 
 type View =
   | { page: 'home' }
   | { page: 'detail'; changeId: string }
   | { page: 'specs' }
+  | { page: 'runtime' }
   | { page: 'workflow' }
   | { page: 'roles' }
   | { page: 'docs' };
@@ -54,6 +57,7 @@ export default function App() {
       case 'workflow': return <WorkflowEditor />;
       case 'roles': return <Roles />;
       case 'specs': return <SpecsEditor onSelect={(id) => setDetailId(id)} />;
+      case 'runtime': return <Runtime />;
       case 'docs': return <DocEditor />;
       default: return <Home onSelect={openDetail} />;
     }

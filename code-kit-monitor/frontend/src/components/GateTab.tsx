@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { gateDisplay } from '../hooks/useFileNames';
 
 const ALL_GATES = ['G1 需求方向门', '需求质量门', 'G2 方案门', 'G2a UI设计门', 'Task 门', 'G3 代码门', '测试门', 'G4 审查门'];
 const VOTE_ICON: Record<string, string> = { '✅': '✅', '❌': '❌', '⚪': '⚪', '⚠️': '⚠️' };
@@ -49,7 +50,7 @@ export default function GateTab({ gates }: { gates: any[] }) {
 
             return (
               <tr key={gateName} style={{ opacity: pending ? 0.4 : 1, borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '8px 10px', fontWeight: 600, fontSize: 12, color: pending ? 'var(--text-muted)' : 'var(--text)' }}>{gateName}</td>
+                <td style={{ padding: '8px 10px', fontWeight: 600, fontSize: 12, color: pending ? 'var(--text-muted)' : 'var(--text)' }}>{gateDisplay(gateName)}</td>
                 {allRoles.map(role => {
                   const v = data?.[role];
                   return (
@@ -86,7 +87,7 @@ export default function GateTab({ gates }: { gates: any[] }) {
         <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
           {gates.map((g: any, i: number) => (
             <div key={i} className="card" style={{ padding: '10px 12px' }}>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{g.name} — {g.question}</div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>{gateDisplay(g.name)} — {g.question}</div>
               {(g.votes || []).map((v: any, j: number) => (
                 <div key={j} style={{ display: 'flex', gap: 8, padding: '3px 0', fontSize: 12, borderBottom: '1px solid var(--border)' }}>
                   <span style={{ fontWeight: 600, minWidth: 90 }}>{v.role}</span>

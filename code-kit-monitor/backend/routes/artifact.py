@@ -5,11 +5,13 @@ from config import get_specs_dir
 
 router = APIRouter()
 SAFE_NAMES = {'CHANGE', 'REQUIREMENT', 'DESIGN', 'UI-DESIGN', 'TASK', 'TEST', 'REVIEW'}
+SAFE_PATTERNS = ['-SUMMARY']  # 允许 SUMMARY 文件
 
 
 @router.get("/api/changes/{change_id}/{artifact}")
 async def get_artifact(change_id: str, artifact: str):
-    if artifact.upper() not in SAFE_NAMES:
+    allowed = artifact.upper() in SAFE_NAMES or any(p in artifact.upper() for p in SAFE_PATTERNS)
+    if not allowed:
         raise HTTPException(400, f"unknown artifact: {artifact}")
     if '..' in change_id or '/' in change_id:
         raise HTTPException(400, "invalid change_id")
@@ -27,7 +29,8 @@ async def get_artifact(change_id: str, artifact: str):
 @router.put("/api/changes/{change_id}/{artifact}")
 async def update_artifact(change_id: str, artifact: str, request: Request):
     """编辑产物文件."""
-    if artifact.upper() not in SAFE_NAMES:
+    allowed = artifact.upper() in SAFE_NAMES or any(p in artifact.upper() for p in SAFE_PATTERNS)
+    if not allowed:
         raise HTTPException(400, f"unknown artifact: {artifact}")
     if '..' in change_id or '/' in change_id:
         raise HTTPException(400, "invalid change_id")

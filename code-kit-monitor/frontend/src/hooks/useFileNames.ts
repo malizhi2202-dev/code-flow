@@ -40,3 +40,25 @@ export function artifactName(fname: string): string {
   if (fname.includes('-SUMMARY')) return `任务总结 (${fname.replace('-SUMMARY.md', '')})`;
   return fname;
 }
+
+// 门禁名称 → 「方向评审 · G1」格式，简洁明了
+export const GATE_DISPLAY: Record<string, string> = {
+  'G1 需求方向门': '方向评审 · G1',
+  'G1 需求门': '方向评审 · G1',
+  '需求质量门': '需求评审 · G1',
+  '需求门': '需求评审 · G1',
+  'G2 方案门': '方案评审 · G2',
+  'G2a UI设计门': 'UI评审 · G2a',
+  'Task 门': '任务规划 · Task',
+  'G3 代码门': '代码评审 · G3',
+  '测试门': '测试评审 · G3',
+  'G4 审查门': '综合终审 · G4',
+};
+
+export function gateDisplay(name: string): string {
+  if (GATE_DISPLAY[name]) return GATE_DISPLAY[name];
+  for (const [key, val] of Object.entries(GATE_DISPLAY)) {
+    if (name.includes(key.replace(/^G\d\w*\s*/, '')) || key.includes(name.replace(/^G\d\w*\s*/, ''))) return val;
+  }
+  return name;
+}

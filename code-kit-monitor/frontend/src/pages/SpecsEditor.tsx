@@ -30,6 +30,7 @@ export default function SpecsEditor({ onSelect }: { onSelect: (id: string) => vo
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     fetch('/api/changes').then(r => r.json()).then(d => setChanges(d.changes || [])).catch(() => {});
@@ -49,12 +50,17 @@ export default function SpecsEditor({ onSelect }: { onSelect: (id: string) => vo
   });
 
   const loadFile = async (changeId: string, fname: string) => {
-    setOpenFile({ changeId, fname }); setLoading(true); setEditing(false);
+    setOpenFile({ changeId, fname }); setLoading(true); setEditing(false); setErrorMsg('');
     try {
       const res = await fetch(`/api/changes/${changeId}/${fname.replace('.md', '')}`);
-      const data = await res.json();
-      setContent(data.content); setEditText(data.content);
-    } catch { setContent(''); }
+      if (!res.ok) {
+        if (res.status === 404) { setContent(''); setErrorMsg('文件不存在'); }
+        else { setContent(''); setErrorMsg(`请求失败 (${res.status})`); }
+      } else {
+        const data = await res.json();
+        setContent(data.content); setEditText(data.content);
+      }
+    } catch { setContent(''); setErrorMsg('网络请求失败，请确认后端已启动'); }
     setLoading(false);
   };
 
@@ -163,6 +169,11 @@ export default function SpecsEditor({ onSelect }: { onSelect: (id: string) => vo
           </div>
         ) : loading ? (
           <p style={{ color: 'var(--text-muted)' }}>加载中...</p>
+        ) : errorMsg ? (
+          <div style={{ textAlign: 'center', paddingTop: 60, color: 'var(--text-muted)' }}>
+            <p style={{ fontSize: 16, color: 'var(--red)', marginBottom: 8 }}>{errorMsg}</p>
+            <p style={{ fontSize: 12 }}>请确认文件存在于 .specs/ 目录中</p>
+          </div>
         ) : (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
