@@ -1,7 +1,7 @@
 """GET /api/health — 数据一致性校验."""
 import os
 from fastapi import APIRouter
-from scanner import FileScanner, _count_tasks
+from scanner import FileScanner, _count_tasks, _count_done_tasks
 from config import SPECS_DIR
 from parsers.section import SectionParser
 
@@ -14,11 +14,12 @@ async def health_check():
     issues = []
     for c in _scanner.scan(force=True):
         change_dir = os.path.join(SPECS_DIR, c.id)
-        # TASK 数 vs SUMMARY 数
-        total_tasks, _ = _count_tasks(change_dir)
+        # 已完成 task 数 vs SUMMARY 数（只检查 done 的 task）
+        done_tasks = _count_done_tasks(change_dir)
         summaries = len([f for f in c.artifacts if f.endswith('-SUMMARY.md')])
-        if total_tasks > 0 and summaries < total_tasks:
-            issues.append({"change_id": c.id, "type": "missing_summary", "detail": f"{summaries}/{total_tasks} SUMMARY files"})
+        total_tasks, _ = _count_tasks(change_dir)
+        if done_tasks > 0 and summaries == 0:
+            issues.append({"change_id": c.id, "type": "missing_summary", "detail": f"{done_tasks} done tasks but 0 SUMMARY files (total: {total_tasks})"})
         # 前端项目缺 UI-DESIGN
         if 'DESIGN.md' in c.artifacts and 'UI-DESIGN.md' not in c.artifacts:
             design_path = os.path.join(change_dir, 'DESIGN.md')

@@ -22,7 +22,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
 ## 任务清单
 
 ```xml
-<task id="T01" parallel="true" status="pending">
+<task id="T01" parallel="true" status="done">
   <name>FastAPI 项目初始化 + 依赖安装</name>
   <read_files>
     DESIGN.md##0
@@ -44,7 +44,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T02" parallel="true" status="pending">
+<task id="T02" parallel="true" status="done">
   <name>React + Vite 项目初始化 + Tremor + Tailwind</name>
   <read_files>
     DESIGN.md##0
@@ -71,7 +71,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T03" parallel="true" status="pending">
+<task id="T03" parallel="true" status="done">
   <name>文件扫描器 FileScanner（增量扫描）</name>
   <read_files>
     DESIGN.md##2（数据流）
@@ -94,7 +94,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T04" parallel="true" status="pending">
+<task id="T04" parallel="true" status="done">
   <name>Design tokens → CSS variables + Tailwind config</name>
   <read_files>
     UI-DESIGN.md##2
@@ -114,7 +114,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T05" parallel="true" status="pending">
+<task id="T05" parallel="true" status="done">
   <name>SectionParser（markdown 节切分）</name>
   <read_files>
     DESIGN.md##2
@@ -135,7 +135,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T06" parallel="true" status="pending">
+<task id="T06" parallel="true" status="done">
   <name>XMLTaskParser（TASK.md 解析）</name>
   <read_files>
     DESIGN.md##2
@@ -156,7 +156,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T07" parallel="true" status="pending">
+<task id="T07" parallel="true" status="done">
   <name>Gate 投票记录解析器</name>
   <read_files>
     DESIGN.md##2
@@ -176,7 +176,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T08" parallel="true" status="pending">
+<task id="T08" parallel="true" status="done">
   <name>GET /api/changes 路由（活跃 change 列表）</name>
   <read_files>
     backend/scanner.py
@@ -197,7 +197,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T09" parallel="true" status="pending">
+<task id="T09" parallel="true" status="done">
   <name>GET /api/changes/&lt;id&gt; 路由（单个 change 详情）</name>
   <read_files>
     backend/scanner.py
@@ -218,7 +218,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T10" parallel="true" status="pending">
+<task id="T10" parallel="true" status="done">
   <name>GET /api/changes/&lt;id&gt;/&lt;artifact&gt; 路由（产物内容）</name>
   <read_files>
     backend/scanner.py
@@ -239,7 +239,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T11" parallel="true" status="pending">
+<task id="T11" parallel="true" status="done">
   <name>GET /api/health 路由（数据一致性校验）</name>
   <read_files>
     backend/scanner.py
@@ -259,7 +259,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T12" parallel="true" status="pending">
+<task id="T12" parallel="true" status="done">
   <name>GET /api/token-usage 路由（Token 聚合）</name>
   <read_files>
     REQUIREMENT.md AC-6
@@ -279,7 +279,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T13" parallel="true" status="pending">
+<task id="T13" parallel="true" status="done">
   <name>GET /api/git/safety 路由（Git 安全网）</name>
   <read_files>
     REQUIREMENT.md AC-8
@@ -299,7 +299,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T14" parallel="true" status="pending">
+<task id="T14" parallel="true" status="done">
   <name>GET /api/search 路由（搜索过滤）</name>
   <read_files>
     REQUIREMENT.md AC-7
@@ -318,7 +318,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T15" parallel="true" status="pending">
+<task id="T15" parallel="true" status="done">
   <name>首页 Change 卡片列表 + 中断任务醒目提示</name>
   <read_files>
     REQUIREMENT.md AC-1,AC-2
@@ -343,7 +343,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T16" parallel="true" status="pending">
+<task id="T16" parallel="true" status="done">
   <name>顶部状态栏 + Token 展示</name>
   <read_files>
     REQUIREMENT.md AC-6
@@ -363,7 +363,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T17" parallel="true" status="pending">
+<task id="T17" parallel="true" status="done">
   <name>搜索栏 + 过滤</name>
   <read_files>
     REQUIREMENT.md AC-7
@@ -383,7 +383,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T18" parallel="true" status="pending">
+<task id="T18" parallel="true" status="done">
   <name>详情页框架 + Tab 导航</name>
   <read_files>
     UI-DESIGN.md##4.2,##5.2
@@ -404,7 +404,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T19" parallel="true" status="pending">
+<task id="T19" parallel="true" status="done">
   <name>工作流 Tab（阶段时间线）</name>
   <read_files>
     REQUIREMENT.md AC-1
@@ -424,7 +424,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T20" parallel="true" status="pending">
+<task id="T20" parallel="true" status="done">
   <name>Task Tab（波次列表）</name>
   <read_files>
     REQUIREMENT.md AC-3
@@ -444,7 +444,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T21" parallel="true" status="pending">
+<task id="T21" parallel="true" status="done">
   <name>门禁 Tab（Gate 卡片）</name>
   <read_files>
     REQUIREMENT.md AC-4
@@ -465,7 +465,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T22" parallel="true" status="pending">
+<task id="T22" parallel="true" status="done">
   <name>产物 Tab（Markdown 查看器 + 批注）</name>
   <read_files>
     REQUIREMENT.md AC-5
@@ -489,7 +489,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T23" parallel="true" status="pending">
+<task id="T23" parallel="true" status="done">
   <name>健康 Tab（数据一致性展示）</name>
   <read_files>
     REQUIREMENT.md AC-9,AC-10
@@ -510,7 +510,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T24" parallel="false" status="pending">
+<task id="T24" parallel="false" status="done">
   <name>暗色/亮色主题切换</name>
   <read_files>
     UI-DESIGN.md##2.2
@@ -532,7 +532,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T25" parallel="false" status="pending">
+<task id="T25" parallel="false" status="done">
   <name>中断任务脉冲动画 + 置顶 + 恢复入口</name>
   <read_files>
     REQUIREMENT.md AC-2
@@ -554,7 +554,7 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
   <auto>true</auto>
 </task>
 
-<task id="T26" parallel="false" status="pending">
+<task id="T26" parallel="false" status="done">
   <name>安全告警标记 + AC-12 localhost 绑定</name>
   <read_files>
     REQUIREMENT.md AC-10,AC-12

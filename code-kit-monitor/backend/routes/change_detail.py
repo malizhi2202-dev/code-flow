@@ -1,7 +1,7 @@
-"""GET /api/changes/<id> — 单个 change 详情."""
+"""GET /api/changes/<id> — 单个 change 详情（开发者/Leader/PM 三维度）."""
 import os
 from fastapi import APIRouter, HTTPException
-from scanner import FileScanner
+from scanner import FileScanner, STAGE_NAMES, _phase_order
 from parsers.section import SectionParser
 from parsers.task import parse_tasks
 from parsers.gate import parse_gates
@@ -24,22 +24,70 @@ async def get_change(change_id: str):
     if not info:
         raise HTTPException(404, f"change '{change_id}' not found")
     change_dir = os.path.join(SPECS_DIR, change_id)
-    # 聚合门禁状态
+
+    # ── 门禁投票详情 ──
     gates = []
     for artifact in ['CHANGE.md', 'REQUIREMENT.md', 'DESIGN.md', 'UI-DESIGN.md', 'TASK.md', 'TEST.md', 'REVIEW.md']:
         content = _read_artifact(change_dir, artifact)
         if content:
-            gates.extend(parse_gates(content))
-    # 解析 task 列表
+            parsed = parse_gates(content)
+            for g in parsed:
+                gates.append({
+                    'name': g['name'], 'question': g.get('question', ''),
+                    'result': g.get('result', 'pending'),
+                    'votes': g['votes'],
+                    'source': artifact,
+                })
+
+    # ── 任务列表 ──
     tasks = []
     task_content = _read_artifact(change_dir, 'TASK.md')
     if task_content:
         tasks = parse_tasks(task_content)
+
+    # ── 各阶段时间线（给 Leader/PM 看瓶颈）──
+    stage_timeline = []
+    for stage_id in ['0-change', '1-requirement', '2-design', '2a-ui-design', '3-task', '4-dev', '5-test', '6-review', '7-integration']:
+        hours = info.stage_durations.get(stage_id)
+        stage_timeline.append({
+            'id': stage_id,
+            'name': STAGE_NAMES.get(stage_id, stage_id),
+            'duration_hours': hours,
+            'status': 'done' if _phase_order(stage_id) < _phase_order(info.phase) else ('current' if stage_id == info.phase else 'pending'),
+        })
+
+    # ── leader 视角：瓶颈检测 ──
+    bottleneck = None
+    if info.stage_durations:
+        slowest = max(info.stage_durations, key=lambda k: info.stage_durations[k])
+        bottleneck = {'stage': slowest, 'stage_name': STAGE_NAMES.get(slowest, slowest), 'hours': info.stage_durations[slowest]}
+
     return {
-        "id": info.id, "phase": info.phase, "progress": info.progress,
-        "status": info.status, "interrupted": info.interrupted,
-        "interrupted_task": info.interrupted_task,
-        "artifacts": info.artifacts,
-        "gates": [{"name": g['name'], "result": g.get('result', 'pending'), "votes": g['votes']} for g in gates],
-        "tasks": tasks,
+        # 基础
+        'id': info.id, 'title': info.title, 'phase': info.phase,
+        'phase_name': info.phase_name, 'status': info.status,
+        'priority': info.priority, 'author': info.author, 'next_action': info.next_action,
+
+        # 时间线（开发者/Leader关心）
+        'created_at': info.created_at, 'updated_at': info.updated_at,
+        'total_days': info.total_days, 'stage_timeline': stage_timeline,
+        'bottleneck': bottleneck,
+
+        # 进度（三种角色都关心）
+        'progress': info.progress, 'progress_pct': info.progress_pct,
+        'task_stats': info.task_stats,
+        'interrupted': info.interrupted, 'interrupted_task': info.interrupted_task,
+        'blockers': info.blockers,
+
+        # 门禁（Leader/PM关心）
+        'gate_stats': info.gate_stats, 'gates': gates,
+
+        # 范围（PM关心）
+        'v1_items': info.v1_items, 'v2_items': info.v2_items, 'out_items': info.out_items,
+
+        # 风险（三种角色都关心）
+        'risks': info.risks,
+
+        # 产物 & 任务
+        'artifacts': info.artifacts, 'tasks': tasks,
     }

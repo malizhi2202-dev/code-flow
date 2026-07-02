@@ -5,7 +5,7 @@ import SearchBar from '../components/SearchBar';
 import ChangeCard from '../components/ChangeCard';
 
 export default function Home({ onSelect }: { onSelect: (id: string) => void }) {
-  const { changes, alerts, loading, filter, fetchChanges } = useChanges();
+  const { changes, filter, fetchChanges } = useChanges();
 
   useEffect(() => { fetchChanges(); const t = setInterval(fetchChanges, 5000); return () => clearInterval(t); }, [fetchChanges]);
 
@@ -13,7 +13,7 @@ export default function Home({ onSelect }: { onSelect: (id: string) => void }) {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
-      <TopBar alerts={alerts} total={changes.length} />
+      <TopBar />
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: '16px 24px' }}>
         <SearchBar />
         {loading && list.length === 0 && <p style={{ color: 'var(--color-text-dim)', textAlign: 'center', marginTop: 48 }}>扫描中...</p>}

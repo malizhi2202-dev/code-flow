@@ -1,65 +1,67 @@
 """TASK.md XML 解析器."""
 import re
-import xml.etree.ElementTree as ET
+from html import unescape
 from typing import Optional
 
 
-def _extract_waves(content: str) -> list[list[str]]:
-    """提取波次划分."""
-    waves = []
-    for line in content.split('\n'):
-        m = re.match(r'Wave \d+.*?:\s*(.+)', line)
+def _safe_xml_parse(block: str) -> Optional[dict]:
+    """安全解析单个 <task> 块，处理常见 XML 问题."""
+    # 移除 XML 注释
+    cleaned = re.sub(r'<!--.*?-->', '', block, flags=re.DOTALL)
+    # HTML unescape (&lt; &gt; &amp; 等)
+    cleaned = unescape(cleaned)
+
+    # 提取属性
+    attrs = {}
+    m = re.match(r'<task\s+(.*?)>', cleaned, re.DOTALL)
+    if m:
+        attr_str = m.group(1)
+        for am in re.finditer(r'(\w+)="([^"]*)"', attr_str):
+            attrs[am.group(1)] = am.group(2)
+
+    task = {
+        'id': attrs.get('id', ''),
+        'parallel': attrs.get('parallel', 'false') == 'true',
+        'status': attrs.get('status', 'pending'),
+        'name': '', 'read_files': [], 'write_files': [],
+        'action': '', 'verify': '', 'done': '', 'auto': True,
+        'depends_on': [],
+    }
+
+    # 提取子元素内容
+    for tag in ['name', 'action', 'verify', 'done']:
+        m = re.search(rf'<{tag}>\s*(.*?)\s*</{tag}>', cleaned, re.DOTALL)
         if m:
-            ids = re.findall(r'T\d+(?:-?\d+)?', m.group(1))
-            if ids:
-                waves.append(ids)
-    return waves
+            task[tag] = m.group(1).strip()
+
+    # read_files / write_files (多行)
+    for tag in ['read_files', 'write_files']:
+        m = re.search(rf'<{tag}>\s*(.*?)\s*</{tag}>', cleaned, re.DOTALL)
+        if m:
+            lines = [l.strip() for l in m.group(1).strip().split('\n') if l.strip()]
+            task[tag] = lines
+
+    # depends_on
+    m = re.search(r'<depends_on>\s*(.*?)\s*</depends_on>', cleaned, re.DOTALL)
+    if m and m.group(1).strip():
+        task['depends_on'] = [d.strip() for d in m.group(1).strip().split(',') if d.strip()]
+
+    # auto
+    m = re.search(r'<auto>\s*(.*?)\s*</auto>', cleaned, re.DOTALL)
+    if m:
+        task['auto'] = m.group(1).strip().lower() == 'true'
+
+    return task if task['id'] else None
 
 
 def parse_tasks(content: str) -> list[dict]:
     """解析 <task> 块 → 结构化数据."""
     tasks = []
-    pattern = re.compile(r'<task\b[^>]*>(.*?)</task>', re.DOTALL)
+    # 匹配完整 <task ...> ... </task> 块
+    pattern = re.compile(r'<task\b[^>]*>.*?</task>', re.DOTALL)
     for match in pattern.finditer(content):
         block = match.group(0)
-        try:
-            root = ET.fromstring(block)
-        except ET.ParseError:
-            cleaned = re.sub(r'<!--.*?-->', '', block, flags=re.DOTALL)
-            cleaned = re.sub(r'&(?!amp;|lt;|gt;|quot;)', '&amp;', cleaned)
-            try:
-                root = ET.fromstring(cleaned)
-            except ET.ParseError:
-                continue
-        task = {
-            'id': root.get('id', ''),
-            'parallel': root.get('parallel', 'false') == 'true',
-            'status': root.get('status', 'pending'),
-            'name': '',
-            'read_files': [], 'write_files': [],
-            'action': '', 'verify': '', 'done': '', 'auto': True,
-            'depends_on': [],
-        }
-        for child in root:
-            tag = child.tag
-            text = (child.text or '').strip()
-            if tag in ('read_files', 'write_files'):
-                task[tag] = [l.strip() for l in text.split('\n') if l.strip()]
-            elif tag == 'depends_on':
-                task['depends_on'] = [d.strip() for d in text.split(',') if d.strip()]
-            elif tag == 'auto':
-                task['auto'] = text.lower() == 'true'
-            elif tag in ('name', 'action', 'verify', 'done'):
-                task[tag] = text
-        if task['id']:
+        task = _safe_xml_parse(block)
+        if task:
             tasks.append(task)
     return tasks
-
-
-def get_wave_for_task(task_id: str, content: str) -> Optional[int]:
-    """返回 task 所属 wave 编号."""
-    waves = _extract_waves(content)
-    for i, wave_ids in enumerate(waves, 1):
-        if task_id in wave_ids:
-            return i
-    return None
