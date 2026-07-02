@@ -26,6 +26,9 @@ Wave 13:           T41 (depends on T39,T40)
 --- v1.2 权限系统补完（设计评审通过后）---
 Wave 14 (parallel): T42[P], T43[P] (depends on T38)
 Wave 15 (parallel): T44[P], T45[P] (depends on T42,T43)
+--- v1.3 登录登出 + 用户中心 ---
+Wave 16 (parallel): T46[P], T47[P] (depends on T42,T43)
+Wave 17:           T48 (depends on T46,T47)
 ```
 
 ---
@@ -967,51 +970,57 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
   <auto>true</auto>
 </task>
 
-<task id="T42" parallel="true" status="pending">
-  <name>前端 LoginPage 用户选择页</name>
+<task id="T42" parallel="true" status="done">
+  <name>前端 LoginPage 密码登录页（含密码验证）</name>
   <read_files>
     frontend/src/App.tsx
-    DESIGN.md##6.6
+    REQUIREMENT.md AC-18
   </read_files>
   <write_files>
     frontend/src/pages/LoginPage.tsx
     frontend/src/App.tsx
   </write_files>
   <action>
-    创建 LoginPage.tsx：
+    重写 LoginPage.tsx（密码登录，不再是无密码选择）：
     - 调用 GET /api/auth/list 获取活跃用户列表
-    - 显示用户卡片列表（名称 + 角色图标 + 项目数）
-    - 点击用户 → 写 localStorage + 刷新进入主界面
-    - 无用户时自动创建 admin 并进入
+    - 显示用户卡片列表（仅名称 + 角色图标，不暴露密码）
+    - 点击用户 → 展开密码输入框 → 调用 POST /api/auth/login 验证密码
+    - 密码错误显示「密码错误」红色提示
+    - 登录成功 → 写 localStorage current_user_id → 刷新进入主界面
+    - 无用户时自动创建 admin（密码 123456）
     - App.tsx：未登录（无 current_user_id）→ 渲染 LoginPage 而非主界面
+    - 登录页底部提示「仅 localhost · 默认管理员密码 123456」
   </action>
-  <verify>打开浏览器，清 localStorage，确认出现用户选择页，选择用户后进入主界面</verify>
-  <done>首次访问显示用户选择页，选择用户后进入，刷新保持登录状态</done>
+  <verify>清 localStorage → 刷新页面 → 选 admin → 输入错误密码 → 显示「密码错误」→ 输入 123456 → 进入主界面</verify>
+  <done>首次访问显示登录页（密码验证），密码错误有提示，正确密码登录成功</done>
   <depends_on>T38</depends_on>
   <auto>true</auto>
 </task>
 
 <task id="T43" parallel="true" status="pending">
-  <name>UserSelect 修复 + 权限查看面板</name>
+  <name>侧边栏用户区域重构：登出按钮 + 用户中心入口（去掉切换用户）</name>
   <read_files>
     frontend/src/components/UserSelect.tsx
     frontend/src/stores/auth.ts
+    frontend/src/App.tsx
+    REQUIREMENT.md AC-25,AC-27
   </read_files>
   <write_files>
     frontend/src/components/UserSelect.tsx
     frontend/src/stores/auth.ts
+    frontend/src/App.tsx
   </write_files>
   <action>
-    修复 UserSelect：
-    - admin 才调用 fetchUsers()，非 admin 不触发 403
-    - 非 admin 显示自己的权限面板（点击弹出）：角色、基础权限、危险权限（如有）、归属项目
-    - 添加「重新选择用户」按钮（清除 localStorage + 刷新 → 回 LoginPage）
-    auth.ts 修复：
-    - fetchUsers 403 时不报错（非 admin 正常情况）
-    - fetchMe 加 rolePermissions 和 permissionDefs 字段
+    重构侧边栏底部用户区域：
+    - **去掉**：switchUser() 方法和用户切换下拉
+    - **改为**：显示当前用户名+角色标签，点击 → 导航到「用户中心」页（nav='profile'）
+    - **新增**：登出按钮（LogOut 图标），点击 → 清除 localStorage current_user_id → window.location.reload() → 回到登录页
+    - auth.ts 修改：删除 switchUser()，保留 fetchMe/fetchUsers
+    - App.tsx：侧边栏底部渲染用户信息 + 登出按钮
+    - 非 admin 调用 fetchUsers 403 时静默处理（不报错）
   </action>
-  <verify>admin 切换下拉显示所有用户；普通用户切换下拉显示自己+权限；不报 403</verify>
-  <done>非 admin 不报 403，切换流畅，权限面板显示正确</done>
+  <verify>登录后侧边栏底部显示用户名+角色；点击用户名 → 进入用户中心页；点击登出 → 回到登录页；刷新 → 仍停留在登录页</verify>
+  <done>侧边栏底部显示用户信息+登出按钮，点击用户名进入用户中心，登出清登录态</done>
   <depends_on>T38</depends_on>
   <auto>true</auto>
 </task>
@@ -1072,4 +1081,98 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
   <depends_on>T43,T44</depends_on>
   <auto>true</auto>
 </task>
+
+--- v1.3 登录登出 + 用户中心 ---
+
+<task id="T46" parallel="true" status="pending">
+  <name>前端 UserCenter 用户中心页</name>
+  <read_files>
+    frontend/src/pages/UserManagement.tsx
+    frontend/src/stores/auth.ts
+    REQUIREMENT.md AC-28
+  </read_files>
+  <write_files>
+    frontend/src/pages/UserCenter.tsx
+  </write_files>
+  <action>
+    创建 UserCenter.tsx 用户中心页（当前登录用户查看自己的完整信息）：
+    - 调用 GET /api/auth/me 获取当前用户信息+权限
+    - 信息卡片：用户 ID（mono 字体）、名称、角色（中文标签+颜色区分：「管理员」蓝色 / 「用户」灰色）、账号创建时间、活跃状态（绿色/灰色圆点）
+    - 权限列表：基础权限（中文名+key，灰色标签）+ 危险权限（红色标签高亮，如有）
+    - 归属项目列表：项目名标签，可点击跳转（调用项目切换 API）
+    - UI 风格：卡片式布局，遵循项目 inline styles + CSS 变量
+    - 页面顶部标题「用户中心」+ 返回按钮
+  </action>
+  <verify>以 admin 登录 → 点击用户名 → 进入用户中心 → 确认角色/权限/项目正确展示 → 项目标签可点击切换</verify>
+  <done>用户中心页完整展示个人信息：ID/名称/角色/权限/项目/时间/状态</done>
+  <depends_on>T42,T43</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T47" parallel="true" status="pending">
+  <name>App.tsx 路由集成：登录/登出/用户中心</name>
+  <read_files>
+    frontend/src/App.tsx
+    frontend/src/stores/auth.ts
+    REQUIREMENT.md AC-18,AC-27,AC-28
+  </read_files>
+  <write_files>
+    frontend/src/App.tsx
+  </write_files>
+  <action>
+    App.tsx 集成改造：
+    - 未登录（无 current_user_id）→ 渲染 LoginPage（不显示侧边栏）
+    - 已登录 → 正常主界面（侧边栏+内容区）
+    - 侧边栏底部用户区域：头像图标+用户名+角色标签，点击→nav='profile'；登出按钮(LogOut)
+    - nav='profile' → 渲染 UserCenter 页
+    - 去掉 UserSelect 切换下拉
+    - 去掉 switchUser 相关逻辑
+    - 登出逻辑：清除 localStorage + set currentUser=null + 页面刷新
+  </action>
+  <verify>完整流程：清 localStorage → 登录页 → 输入密码登录 → 主界面 → 点用户名→用户中心→返回 → 点登出→回登录页 → 刷新仍登录页</verify>
+  <done>登录→主界面→用户中心→登出→登录页 全流程闭环，去掉用户切换功能</done>
+  <depends_on>T43,T46</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T48" parallel="false" status="pending">
+  <name>v1.3 端到端验证：登录/登出/用户中心</name>
+  <read_files>
+    frontend/src/App.tsx
+    frontend/src/pages/LoginPage.tsx
+    frontend/src/pages/UserCenter.tsx
+    REQUIREMENT.md##v1.3
+  </read_files>
+  <write_files>
+    （无新文件，验证+修复）
+  </write_files>
+  <action>
+    端到端验证 v1.3 全流程：
+    1. curl POST /api/auth/login -d '{"user_id":"admin","password":"123456"}' → 返回 ok
+    2. curl POST /api/auth/login -d '{"user_id":"admin","password":"wrong"}' → 401 密码错误
+    3. 前端验证：登录页→密码验证→进入主界面→用户中心→登出→回到登录页
+    4. 确认不再有用户切换下拉/按钮
+    5. 确认侧边栏底部显示当前用户名+登出按钮
+    6. 确认用户中心页信息完整（ID/名称/角色/权限/项目/时间/状态）
+  </action>
+  <verify>curl 验证登录 API + 浏览器验证全流程 UI</verify>
+  <done>v1.3 全流程闭环：密码登录/登出/用户中心完整可用，无切换用户功能</done>
+  <depends_on>T47</depends_on>
+  <auto>false</auto>
+</task>
+```
+
+---
+
+## 🛡️ Task 门 · 投票记录（v1.3 新增任务）
+
+```
+🗳️ Task 门: v1.3 任务拆分（T46/T47/T48）是否合理？
+
+   🟫 工程效能专家: ✅ 通过 — T46(用户中心页) T47(路由集成) T48(验证) 拆分为 3 个独立 task，粒度合理；T46/T47 可并行（无读写冲突），T48 串行验证；wave 划分清晰
+   🟩 架构师: ✅ 通过 — 纯前端变更，无 schema/API 变更；T46 复用已有 /api/auth/me 端点无需后端改动；T47 仅改 App.tsx 路由+侧边栏；影响面小，风险低
+   🧪 资深测试工程师: ✅ 通过 — 每个 task 的 verify 可操作可验证（curl + 浏览器），T48 端到端验证覆盖了登录成功/失败/登出/用户中心全路径
+   🔴 安全审计师: ✅ 通过 — 密码登录（AC-18）已在前置 task 实现；登出清 localStorage 无残留；T46 用户中心仅展示只读信息无写操作；无新增安全风险
+
+   结果: 4/4 全票通过 → ✅ 可按 Wave 16→17 顺序执行
 ```

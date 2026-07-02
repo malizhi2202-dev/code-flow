@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Activity, GitBranch, Users, FileText, Settings, Layers, ChevronLeft, PanelLeft, Shield, FileSearch } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Activity, GitBranch, Users, FileText, Settings, Layers, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon } from 'lucide-react';
 import Home from './pages/Home';
 import Detail from './pages/Detail';
 import Roles from './pages/Roles';
@@ -10,8 +10,9 @@ import Runtime from './pages/Runtime';
 import UserManagement from './pages/UserManagement';
 import AuditLog from './pages/AuditLog';
 import LoginPage from './pages/LoginPage';
+import UserCenter from './pages/UserCenter';
 import ProjectSwitcher from './components/ProjectSwitcher';
-import UserSelect from './components/UserSelect';
+import UserArea from './components/UserSelect';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useAuth } from './stores/auth';
 
@@ -37,22 +38,30 @@ type View =
   | { page: 'runtime' }
   | { page: 'workflow' }
   | { page: 'roles' }
-  | { page: 'docs' };
+  | { page: 'docs' }
+  | { page: 'users' }
+  | { page: 'audit' }
+  | { page: 'profile' };
 
 export default function App() {
   const [nav, setNav] = useState('home');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [summary, setSummary] = useState<any>(null);
-  const { isAdmin, fetchMe, loaded } = useAuth();
+  const { isAdmin, fetchMe, fetchUsers, loaded } = useAuth();
 
-  // 未选择用户 → 显示登录页
+  // 未登录 → 显示登录页
   const userId = localStorage.getItem('current_user_id');
   if (!userId) {
     return <LoginPage />;
   }
 
-  useEffect(() => { fetchMe(); }, []);
+  useEffect(() => {
+    fetchMe().then(() => {
+      const state = useAuth.getState();
+      if (state.isAdmin) fetchUsers();
+    });
+  }, []);
 
   useEffect(() => {
     fetch('/api/changes').then(r => r.json()).then(d => setSummary(d.summary)).catch(() => {});
@@ -80,6 +89,7 @@ export default function App() {
       case 'docs': return <DocEditor />;
       case 'users': return <UserManagement />;
       case 'audit': return <AuditLog />;
+      case 'profile': return <UserCenter onBack={() => navigate('home')} />;
       default: return <Home onSelect={openDetail} />;
     }
   };
@@ -161,11 +171,11 @@ export default function App() {
           )}
         </nav>
 
-        {/* 底部：用户切换 + 状态 + 折叠 */}
+        {/* 底部：用户信息 + 登出 + 状态 + 折叠 */}
         <div style={{ padding: '8px', borderTop: '1px solid var(--border)' }}>
-          <UserSelect collapsed={collapsed} />
+          <UserArea collapsed={collapsed} onNavigateProfile={() => navigate('profile')} />
           {!collapsed && summary && (
-            <div style={{ padding: '4px 8px', marginBottom: 6, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            <div style={{ padding: '4px 8px', marginTop: 6, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
               <div><span className="dot dot-green" style={{ marginRight: 4 }} />{summary.active_changes} active</div>
               <div style={{ marginTop: 2 }}>{summary.done_tasks}/{summary.total_tasks} tasks</div>
             </div>
@@ -173,7 +183,7 @@ export default function App() {
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="btn btn-ghost btn-sm"
-            style={{ width: '100%', justifyContent: collapsed ? 'center' : 'flex-start' }}
+            style={{ width: '100%', marginTop: 6, justifyContent: collapsed ? 'center' : 'flex-start' }}
           >
             {collapsed ? <PanelLeft size={14} /> : <><ChevronLeft size={14} />{!collapsed && ' 收起'}</>}
           </button>

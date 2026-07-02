@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 export interface UserInfo {
   id: string; name: string; role: string;
-  project_ids: string[]; created_at: string; active: boolean;
+  project_ids: string[]; custom_permissions: string[]; created_at: string; active: boolean;
 }
 
 interface AuthState {
@@ -14,7 +14,7 @@ interface AuthState {
   permissionDefs: Record<string, { name: string; description: string; dangerous: boolean }>;
   fetchMe: () => Promise<void>;
   fetchUsers: () => Promise<void>;
-  switchUser: (userId: string) => void;
+  logout: () => void;
 }
 
 function getUserId(): string {
@@ -72,8 +72,9 @@ export const useAuth = create<AuthState>((set, get) => ({
     } catch { /* silently ignore */ }
   },
 
-  switchUser: (userId: string) => {
-    localStorage.setItem('current_user_id', userId);
+  logout: () => {
+    localStorage.removeItem('current_user_id');
+    set({ currentUser: null, isAdmin: false, loaded: false, rolePermissions: [], userList: [] });
     window.location.reload();
   },
 }));
