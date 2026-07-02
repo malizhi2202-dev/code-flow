@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Activity, GitBranch, Users, FileText, Settings, Layers, ChevronLeft, PanelLeft } from 'lucide-react';
+import { Activity, GitBranch, Users, FileText, Settings, Layers, ChevronLeft, PanelLeft, Shield, FileSearch } from 'lucide-react';
 import Home from './pages/Home';
 import Detail from './pages/Detail';
 import Roles from './pages/Roles';
@@ -7,8 +7,13 @@ import WorkflowEditor from './pages/WorkflowEditor';
 import DocEditor from './pages/DocEditor';
 import SpecsEditor from './pages/SpecsEditor';
 import Runtime from './pages/Runtime';
+import UserManagement from './pages/UserManagement';
+import AuditLog from './pages/AuditLog';
+import LoginPage from './pages/LoginPage';
 import ProjectSwitcher from './components/ProjectSwitcher';
+import UserSelect from './components/UserSelect';
 import ErrorBoundary from './components/ErrorBoundary';
+import { useAuth } from './stores/auth';
 
 type NavItem = { id: string; label: string; icon: React.ReactNode };
 const NAV: NavItem[] = [
@@ -18,6 +23,11 @@ const NAV: NavItem[] = [
   { id: 'workflow', label: '流程配置', icon: <GitBranch size={16} /> },
   { id: 'roles', label: '专家管理', icon: <Users size={16} /> },
   { id: 'docs', label: '规则引擎', icon: <FileText size={16} /> },
+];
+
+const ADMIN_NAV: NavItem[] = [
+  { id: 'users', label: '用户管理', icon: <Shield size={16} /> },
+  { id: 'audit', label: '审计日志', icon: <FileSearch size={16} /> },
 ];
 
 type View =
@@ -34,6 +44,15 @@ export default function App() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [summary, setSummary] = useState<any>(null);
+  const { isAdmin, fetchMe, loaded } = useAuth();
+
+  // 未选择用户 → 显示登录页
+  const userId = localStorage.getItem('current_user_id');
+  if (!userId) {
+    return <LoginPage />;
+  }
+
+  useEffect(() => { fetchMe(); }, []);
 
   useEffect(() => {
     fetch('/api/changes').then(r => r.json()).then(d => setSummary(d.summary)).catch(() => {});
@@ -59,6 +78,8 @@ export default function App() {
       case 'specs': return <SpecsEditor onSelect={(id) => setDetailId(id)} />;
       case 'runtime': return <Runtime />;
       case 'docs': return <DocEditor />;
+      case 'users': return <UserManagement />;
+      case 'audit': return <AuditLog />;
       default: return <Home onSelect={openDetail} />;
     }
   };
@@ -107,10 +128,42 @@ export default function App() {
               {!collapsed && <span>{item.label}</span>}
             </button>
           ))}
+
+          {/* Admin only nav */}
+          {isAdmin && (
+            <>
+              {!collapsed && (
+                <div style={{ padding: '4px 10px', marginTop: 8, marginBottom: 4, fontSize: 9, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.06 }}>
+                  管理
+                </div>
+              )}
+              {ADMIN_NAV.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => navigate(item.id)}
+                  aria-label={item.label}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    width: '100%', padding: collapsed ? '8px 0' : '7px 10px',
+                    marginBottom: 2, borderRadius: 'var(--r-sm)',
+                    background: nav === item.id && !detailId ? 'var(--bg-selected)' : 'transparent',
+                    border: 'none', color: nav === item.id && !detailId ? 'var(--blue)' : 'var(--text-secondary)',
+                    cursor: 'pointer', fontSize: 13, fontWeight: nav === item.id && !detailId ? 600 : 400,
+                    transition: 'all var(--fast)',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                  }}
+                >
+                  {item.icon}
+                  {!collapsed && <span>{item.label}</span>}
+                </button>
+              ))}
+            </>
+          )}
         </nav>
 
-        {/* 底部：状态 + 折叠 */}
+        {/* 底部：用户切换 + 状态 + 折叠 */}
         <div style={{ padding: '8px', borderTop: '1px solid var(--border)' }}>
+          <UserSelect collapsed={collapsed} />
           {!collapsed && summary && (
             <div style={{ padding: '4px 8px', marginBottom: 6, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
               <div><span className="dot dot-green" style={{ marginRight: 4 }} />{summary.active_changes} active</div>

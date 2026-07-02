@@ -3,6 +3,7 @@ import os
 import json
 from fastapi import APIRouter, Request, HTTPException
 from config import get_specs_dir, get_code_kit_dir, set_current_project, discover_projects, CURRENT_PROJECT
+from auth import get_current_user, has_permission, write_audit, is_admin
 
 router = APIRouter()
 
@@ -94,8 +95,13 @@ async def get_workflow():
 
 @router.put("/api/admin/workflow")
 async def update_workflow(request: Request):
+    user = get_current_user(request)
+    if not has_permission(user, "project:write"):
+        raise HTTPException(status_code=403, detail="需要权限: project:write")
     body = await request.json()
     _save_workflow(body)
+    write_audit(user, "project:write", "workflow.json", "config",
+                "更新工作流配置", request=request)
     return {"ok": True}
 
 
@@ -130,6 +136,9 @@ async def read_file(path: str):
 @router.put("/api/admin/files/{path:path}")
 async def write_file(path: str, request: Request):
     """写入 code-kit 文件."""
+    user = get_current_user(request)
+    if not has_permission(user, "project:write"):
+        raise HTTPException(status_code=403, detail="需要权限: project:write")
     full = os.path.join(_code_kit_dir(), path)
     if '..' in path or not full.startswith(_code_kit_dir()):
         raise HTTPException(400, "invalid path")
@@ -137,6 +146,8 @@ async def write_file(path: str, request: Request):
     os.makedirs(os.path.dirname(full), exist_ok=True)
     with open(full, "w", encoding="utf-8") as f:
         f.write(body["content"])
+    write_audit(user, "project:write", path, "file",
+                f"编辑文件 {path}，大小: {len(body['content'])} 字节", request=request)
     return {"ok": True, "path": path, "size": len(body["content"])}
 
 
@@ -156,22 +167,40 @@ async def get_file_names():
 @router.put("/api/admin/file-names")
 async def update_file_names(request: Request):
     """保存文件中文名映射."""
+    user = get_current_user(request)
+    if not has_permission(user, "project:write"):
+        raise HTTPException(status_code=403, detail="需要权限: project:write")
     mapping_file = os.path.join(get_specs_dir(), "file-names.json")
     body = await request.json()
     json.dump(body, open(mapping_file, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    write_audit(user, "project:write", "file-names.json", "config",
+                "更新文件中文名映射", request=request)
     return {"ok": True}
 
 
 @router.get("/api/admin/projects")
-async def list_projects():
-    return {"projects": discover_projects(), "current": CURRENT_PROJECT}
+async def list_projects(request: Request):
+    user = get_current_user(request)
+    projects = discover_projects(user)
+    return {"projects": projects, "current": CURRENT_PROJECT, "is_admin": is_admin(user)}
 
 
 @router.post("/api/admin/projects/switch")
 async def switch_project(request: Request):
+    user = get_current_user(request)
     body = await request.json()
     root = body.get("root", "")
     if not os.path.isdir(root):
         raise HTTPException(400, "invalid project root")
+
+    # 检查用户是否有权访问该项目
+    if not is_admin(user):
+        allowed = set(user.get("project_ids", []))
+        project_name = os.path.basename(root)
+        if allowed and project_name not in allowed:
+            raise HTTPException(status_code=403, detail="无权访问该项目")
+
     set_current_project(root)
+    write_audit(user, "project:read", os.path.basename(root), "project",
+                f"切换到项目 {root}", request=request)
     return {"ok": True, "current": CURRENT_PROJECT}

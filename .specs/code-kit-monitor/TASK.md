@@ -18,6 +18,14 @@ Wave 7:            T24 → T25 → T26 (depends on T18-T23)
 --- v1.1 ---
 Wave 8 (parallel): T27[P], T28[P], T29[P]
 Wave 9:            T30 → T31 → T32 → T33
+--- v1.2 权限管理系统 ---
+Wave 10 (parallel): T34[P], T35[P], T36[P]
+Wave 11 (parallel): T37 (depends on T36) + T38[P] (depends on T37)
+Wave 12 (parallel): T39[P], T40[P] (depends on T38)
+Wave 13:           T41 (depends on T39,T40)
+--- v1.2 权限系统补完（设计评审通过后）---
+Wave 14 (parallel): T42[P], T43[P] (depends on T38)
+Wave 15 (parallel): T44[P], T45[P] (depends on T42,T43)
 ```
 
 ---
@@ -737,6 +745,331 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
   <verify>cd frontend && npx vitest run --reporter=verbose 2>&1 | tail -3</verify>
   <done>子组件崩溃不导致白屏，显示错误提示+重试按钮</done>
   <depends_on>T30</depends_on>
+  <auto>true</auto>
+</task>
+
+--- v1.2 权限管理系统 ---
+
+<task id="T34" parallel="true" status="done">
+  <name>后端 auth.py 认证鉴权模块</name>
+  <read_files>
+    backend/config.py
+    backend/main.py
+    DESIGN.md##权限
+  </read_files>
+  <write_files>
+    backend/auth.py
+  </write_files>
+  <action>
+    创建认证+鉴权核心模块：
+    - 数据目录独立于 CURRENT_PROJECT（跨项目共享 users.json / audit.jsonl）
+    - 用户 CRUD（load_users / save_users / get_user），含默认 admin 初始化
+    - 权限检查（has_permission / require_permission），RBAC 角色-权限映射
+    - 审计日志（write_audit / read_audit / audit_stats），JSONL 追加 + 文件锁 + 自动轮转（>10000行归档）
+    - fcntl 文件锁防止并发写入丢数据
+    - PERMISSION_DEFS 权限定义表 + ROLE_PERMISSIONS 角色映射表
+  </action>
+  <verify>cd backend && python -c "from auth import load_users, get_user, has_permission, write_audit; u=get_user('admin'); assert u and has_permission(u,'user:manage'); print('OK')"</verify>
+  <done>auth.py 可独立导入，admin 用户自动创建，权限检查可用</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T35" parallel="true" status="done">
+  <name>后端 main.py 认证中间件 + 路由注册</name>
+  <read_files>
+    backend/main.py
+    backend/auth.py
+  </read_files>
+  <write_files>
+    backend/main.py
+  </write_files>
+  <action>
+    修改 main.py：
+    - auth_middleware：读取 X-User-Id header 注入 request.state.user
+    - 安全规则：未传 header → 默认 admin；传了但用户不存在 → 401
+    - 保留 localhost-only 检查
+    - 注册 auth_api 和 audit_api 两个新路由
+  </action>
+  <verify>cd backend && python -c "from main import app; print([r.path for r in app.routes if 'auth' in r.path or 'audit' in r.path])"</verify>
+  <done>中间件正确注入用户，新路由已注册，安全 fallback 已修复</done>
+  <depends_on>T34</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T36" parallel="true" status="done">
+  <name>后端 auth_api + audit_api 路由</name>
+  <read_files>
+    backend/auth.py
+    backend/routes/roles_api.py
+    DESIGN.md##权限
+  </read_files>
+  <write_files>
+    backend/routes/auth_api.py
+    backend/routes/audit_api.py
+  </write_files>
+  <action>
+    创建两个新路由文件：
+    auth_api.py：
+    - GET /api/auth/me — 当前用户信息+权限
+    - GET /api/auth/users — 用户列表（user:manage 权限）
+    - POST /api/auth/users — 创建用户 + 审计
+    - PUT /api/auth/users/{id} — 更新用户 + 权限变更审计
+    - DELETE /api/auth/users/{id} — 删除用户 + 审计
+    - POST /api/auth/login — 验证用户存在
+    audit_api.py：
+    - GET /api/audit — 查询审计日志（筛选：user_id/action/days/limit）
+    - GET /api/audit/stats — 审计统计摘要
+    - GET /api/audit/actions — 审计动作类型列表
+  </action>
+  <verify>curl -s http://127.0.0.1:8000/api/auth/me | python -c "import sys,json; d=json.load(sys.stdin); assert 'user' in d; print('OK')"</verify>
+  <done>用户管理 API 和审计日志 API 可用，权限校验生效</done>
+  <depends_on>T35</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T37" parallel="false" status="done">
+  <name>后端已有路由权限改造</name>
+  <read_files>
+    backend/routes/admin_api.py
+    backend/routes/roles_api.py
+    backend/config.py
+  </read_files>
+  <write_files>
+    backend/routes/admin_api.py
+    backend/routes/roles_api.py
+    backend/config.py
+  </write_files>
+  <action>
+    对已有路由添加权限检查和审计：
+    config.py：
+    - discover_projects(user) 增加 user 参数，按 project_ids 过滤
+    admin_api.py：
+    - 所有 PUT/POST 操作加 has_permission 检查
+    - 工作流更新、文件写入、文件命名更新加 audit
+    - 项目列表按用户过滤 + 返回 is_admin
+    - 项目切换检查用户权限
+    roles_api.py：
+    - 创建/更新/删除角色加权限检查 + 审计
+    - 删除角色需要 project:delete 权限
+  </action>
+  <verify>cd backend && python -c "from routes.admin_api import router; from routes.roles_api import router; print('imports OK')"</verify>
+  <done>所有写操作有权限门禁，危险操作有审计记录，项目列表按用户隔离</done>
+  <depends_on>T36</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T38" parallel="true" status="done">
+  <name>前端 auth store + UserSelect 组件</name>
+  <read_files>
+    frontend/src/stores/changes.ts
+    frontend/src/components/ProjectSwitcher.tsx
+    frontend/src/App.tsx
+  </read_files>
+  <write_files>
+    frontend/src/stores/auth.ts
+    frontend/src/components/UserSelect.tsx
+  </write_files>
+  <action>
+    stores/auth.ts — Zustand store：
+    - currentUser / userList / isAdmin 状态
+    - fetchMe() / fetchUsers() / switchUser() 方法
+    - 所有后续 fetch 通过该 store 注入 X-User-Id header
+    components/UserSelect.tsx：
+    - 用户切换下拉框（复用 ProjectSwitcher 下拉模式）
+    - 显示当前用户名+角色
+    - 切换时更新 store + 刷新
+  </action>
+  <verify>cd frontend && npx tsc --noEmit --pretty 2>&1 | head -5</verify>
+  <done>用户状态管理可用，UserSelect 组件可切换用户</done>
+  <depends_on>T37</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T39" parallel="true" status="done">
+  <name>前端 UserManagement 页</name>
+  <read_files>
+    frontend/src/pages/Roles.tsx
+    frontend/src/components/ConfirmDialog.tsx
+    DESIGN.md##前端
+  </read_files>
+  <write_files>
+    frontend/src/pages/UserManagement.tsx
+  </write_files>
+  <action>
+    用户管理页（admin only）：
+    - 用户列表卡片：ID、名称、角色标签、归属项目数、状态
+    - 新增用户表单：ID / 名称 / 角色选择(admin/user) / 项目多选
+    - 编辑用户：内联编辑表单，修改角色/项目分配/状态
+    - 删除确认对话框（复用 ConfirmDialog）
+    - UI 风格遵循 Roles.tsx 模式：inline styles + CSS 变量
+  </action>
+  <verify>cd frontend && npx tsc --noEmit --pretty 2>&1 | head -5</verify>
+  <done>admin 可 CRUD 用户，项目分配可用，操作记审计</done>
+  <depends_on>T38</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T40" parallel="true" status="done">
+  <name>前端 AuditLog 页</name>
+  <read_files>
+    frontend/src/pages/Runtime.tsx
+    DESIGN.md##前端
+  </read_files>
+  <write_files>
+    frontend/src/pages/AuditLog.tsx
+  </write_files>
+  <action>
+    审计日志查看页（admin only）：
+    - 过滤栏：按用户、操作类型、天数筛选
+    - 统计卡片：总数、今日操作数、按操作类型分布
+    - 日志表格：时间、用户、操作标签、目标、详情、结果（成功/失败）
+    - 分页/加载更多
+    - UI 风格遵循项目模式
+  </action>
+  <verify>cd frontend && npx tsc --noEmit --pretty 2>&1 | head -5</verify>
+  <done>审计日志可筛选查看，统计数据准确</done>
+  <depends_on>T38</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T41" parallel="false" status="done">
+  <name>前端 App.tsx 导航集成 + 端到端验证</name>
+  <read_files>
+    frontend/src/App.tsx
+    frontend/src/components/ProjectSwitcher.tsx
+  </read_files>
+  <write_files>
+    frontend/src/App.tsx
+    frontend/src/main.tsx
+  </write_files>
+  <action>
+    App.tsx 改造：
+    - 添加'用户管理'(Shield)和'审计日志'(FileSearch)导航（admin only）
+    - 顶部/底部显示当前用户 + UserSelect 切换
+    - 路由：nav='users' → UserManagement, nav='audit' → AuditLog
+    - 非 admin 隐藏管理类导航
+    main.tsx：
+    - 初始化时从 localStorage 恢复 user_id
+    - 首次访问默认 admin
+  </action>
+  <verify>
+    后端验证：
+    curl -X POST http://127.0.0.1:8000/api/auth/users -H 'X-User-Id: admin' -H 'Content-Type: application/json' -d '{"id":"test","name":"测试","role":"user","project_ids":["code-kit-monitor"]}'
+    curl http://127.0.0.1:8000/api/admin/projects -H 'X-User-Id: test'  # 应只返回分配的项目
+    curl -X POST http://127.0.0.1:8000/api/auth/users -H 'X-User-Id: test' ...  # 应 403
+    curl http://127.0.0.1:8000/api/audit -H 'X-User-Id: admin'  # 应有审计记录
+    curl http://127.0.0.1:8000/api/audit -H 'X-User-Id: test'  # 应 403
+    cat ../audit.jsonl | tail -5
+  </verify>
+  <done>完整权限隔离：admin 全见，用户隔离，审计完整，前端导航按角色显示</done>
+  <depends_on>T39,T40</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T42" parallel="true" status="pending">
+  <name>前端 LoginPage 用户选择页</name>
+  <read_files>
+    frontend/src/App.tsx
+    DESIGN.md##6.6
+  </read_files>
+  <write_files>
+    frontend/src/pages/LoginPage.tsx
+    frontend/src/App.tsx
+  </write_files>
+  <action>
+    创建 LoginPage.tsx：
+    - 调用 GET /api/auth/list 获取活跃用户列表
+    - 显示用户卡片列表（名称 + 角色图标 + 项目数）
+    - 点击用户 → 写 localStorage + 刷新进入主界面
+    - 无用户时自动创建 admin 并进入
+    - App.tsx：未登录（无 current_user_id）→ 渲染 LoginPage 而非主界面
+  </action>
+  <verify>打开浏览器，清 localStorage，确认出现用户选择页，选择用户后进入主界面</verify>
+  <done>首次访问显示用户选择页，选择用户后进入，刷新保持登录状态</done>
+  <depends_on>T38</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T43" parallel="true" status="pending">
+  <name>UserSelect 修复 + 权限查看面板</name>
+  <read_files>
+    frontend/src/components/UserSelect.tsx
+    frontend/src/stores/auth.ts
+  </read_files>
+  <write_files>
+    frontend/src/components/UserSelect.tsx
+    frontend/src/stores/auth.ts
+  </write_files>
+  <action>
+    修复 UserSelect：
+    - admin 才调用 fetchUsers()，非 admin 不触发 403
+    - 非 admin 显示自己的权限面板（点击弹出）：角色、基础权限、危险权限（如有）、归属项目
+    - 添加「重新选择用户」按钮（清除 localStorage + 刷新 → 回 LoginPage）
+    auth.ts 修复：
+    - fetchUsers 403 时不报错（非 admin 正常情况）
+    - fetchMe 加 rolePermissions 和 permissionDefs 字段
+  </action>
+  <verify>admin 切换下拉显示所有用户；普通用户切换下拉显示自己+权限；不报 403</verify>
+  <done>非 admin 不报 403，切换流畅，权限面板显示正确</done>
+  <depends_on>T38</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T44" parallel="true" status="pending">
+  <name>UserManagement 完整权限管理面板</name>
+  <read_files>
+    frontend/src/pages/UserManagement.tsx
+    frontend/src/stores/auth.ts
+    DESIGN.md##6.1
+  </read_files>
+  <write_files>
+    frontend/src/pages/UserManagement.tsx
+  </write_files>
+  <action>
+    重写 UserManagement.tsx：
+    - 用户列表卡片：ID/名称/角色标签/项目数/危险权限标签/活跃状态
+    - 新增用户表单：ID/名称/角色(admin/user)/项目多选/危险权限勾选框（project:delete/workflow:stop/user:manage/audit:view）
+    - 编辑用户：修改角色/项目分配/权限勾选/活跃状态
+    - admin 用户不可删除（按钮隐藏）
+    - 项目标签可点击（如果有项目详情入口）
+    - 调用 GET /api/auth/permissions 获取权限定义表渲染勾选框
+  </action>
+  <verify>admin 可创建用户、勾选危险权限、分配项目；切换该用户登录验证权限生效</verify>
+  <done>完整 CRUD + 危险权限勾选 + 项目多选分配，admin 不可删除</done>
+  <depends_on>T42</depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T45" parallel="false" status="pending">
+  <name>端到端修复验证 + 双向入口</name>
+  <read_files>
+    frontend/src/App.tsx
+    frontend/src/pages/UserManagement.tsx
+    REQUIREMENT.md##v1.2
+  </read_files>
+  <write_files>
+    frontend/src/App.tsx
+    frontend/src/pages/UserManagement.tsx
+  </write_files>
+  <action>
+    端到端修复：
+    - App.tsx 未登录→LoginPage 渲染逻辑
+    - 确认 admin 导航「管理」分组只有 admin 可见
+    - UserManagement 项目标签点击 → 跳转项目看板（可选实现）
+    - 验证全流程：创建用户→分配项目+权限→切换登录→权限隔离→审计日志记录
+  </action>
+  <verify>
+    curl 验证：
+    1. POST /api/auth/users 创建用户
+    2. GET /api/admin/projects -H "X-User-Id: newuser" → 只返回分配的项目
+    3. POST /api/auth/users -H "X-User-Id: newuser" → 403
+    4. DELETE /api/roles/{id} -H "X-User-Id: newuser" → 403（无 project:delete）
+    5. 给用户加 project:delete → 再次尝试删除 → 成功
+    6. GET /api/audit → 所有操作有记录
+  </verify>
+  <done>全流程闭环：登录→权限隔离→危险操作鉴权→审计追溯</done>
+  <depends_on>T43,T44</depends_on>
   <auto>true</auto>
 </task>
 ```

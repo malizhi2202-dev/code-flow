@@ -194,9 +194,149 @@ draft → 0-change → 1-requirement → 2-design → 2a-ui-design(前端)
 - **不做**产物在线编辑（v2）
 - **不做**历史趋势图表（v2）
 - **不做**向量化语义搜索（v2，且需先确认有真实需求）
-- **不做**多用户权限/认证系统
+- ~~**不做**多用户权限/认证系统~~ → v1.2 纳入（见 §6）
 - **不做**公网部署/HTTPS/域名绑定
 - **不做**移动端/响应式（桌面优先）
+
+## 6. v1.2 用户体系 & 权限管理设计（⭐ 新增）
+
+### 6.1 权限模型
+
+```
+                    ┌─────────────────────────────┐
+                    │     effective_permissions    │
+                    │  = role_base ∪ custom_extra  │
+                    └─────────────┬───────────────┘
+                                  │
+            ┌─────────────────────┼─────────────────────┐
+            │                     │                     │
+     ┌──────▼──────┐     ┌───────▼───────┐     ┌───────▼───────┐
+     │    admin     │     │     user      │     │   自定义叠加   │
+     │ 全部 6 权限   │     │ read + write  │     │ admin 可单独给 │
+     │ 全项目可见    │     │ 仅分配项目     │     │ user 加危险权限 │
+     └─────────────┘     └───────────────┘     └───────────────┘
+```
+
+**权限分级**：
+
+| 级别 | 权限 | 说明 | 默认谁有 |
+|------|------|------|----------|
+| 🟢 基础 | `project:read` | 查看项目、变更、文档 | admin + user |
+| 🟢 基础 | `project:write` | 修改配置、文件、门禁 | admin + user |
+| 🔴 危险 | `project:delete` | 删除变更/产物/角色 | admin only |
+| 🔴 危险 | `workflow:stop` | 停止流程 | admin only |
+| 🔴 危险 | `user:manage` | 创建/编辑/删除用户 | admin only |
+| 🟡 敏感 | `audit:view` | 查看审计日志 | admin only |
+
+### 6.2 用户数据模型
+
+**存储位置**：`<scan_root>/users.json`（跨项目共享，独立于 CURRENT_PROJECT）
+
+```json
+{
+  "users": [{
+    "id": "zhangsan",              // 唯一标识（英文）
+    "name": "张三",                 // 显示名称
+    "role": "admin|user",          // 基础角色
+    "project_ids": ["proj-a"],     // 归属项目（admin 留空=全部）
+    "custom_permissions": [        // 额外授予的危险权限
+      "project:delete",
+      "workflow:stop"
+    ],
+    "active": true,
+    "created_at": "2026-07-02T..."
+  }]
+}
+```
+
+### 6.3 审计日志模型
+
+**存储位置**：`<scan_root>/audit.jsonl`（JSONL 追加 + 文件锁 + 10000 行自动归档）
+
+```json
+{
+  "timestamp": "2026-07-02T15:30:00",
+  "user_id": "zhangsan",
+  "user_name": "张三",
+  "action": "project:delete|user:create|workflow:stop|...",
+  "target": "change-abc/CHANGE.md",
+  "target_type": "change|user|role|config|file|project",
+  "detail": "删除变更产物 CHANGE.md",
+  "ip": "127.0.0.1",
+  "result": "success|failure"
+}
+```
+
+### 6.4 认证方案
+
+**ADR-004 · X-User-Id Header 认证（仅 localhost）**
+
+- **选型**：HTTP Header `X-User-Id: <user_id>`（无密码，localhost 信任边界）
+- **理由**：
+  - 服务端已有 localhost-only 中间件（只接受 127.0.0.1）
+  - 本机信任边界内不需要密码/RBAC token
+  - 极简实现，零外部依赖
+- **安全规则**：
+  - 未传 Header → 默认 admin（向后兼容）
+  - 传了 Header 但用户不存在 → 401
+  - 切换用户 → 前端刷新页面（清除缓存状态）
+
+### 6.5 API 路由设计
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/auth/list` | 公开 | 活跃用户列表（登录页用） |
+| GET | `/api/auth/me` | 登录用户 | 当前用户 + 权限信息 |
+| POST | `/api/auth/login` | 公开 | 验证用户存在 |
+| GET | `/api/auth/users` | `user:manage` | 用户列表 |
+| POST | `/api/auth/users` | `user:manage` | 创建用户 + 审计 |
+| PUT | `/api/auth/users/{id}` | `user:manage` | 更新用户 + 审计 |
+| DELETE | `/api/auth/users/{id}` | `user:manage` | 删除用户 + 审计 |
+| GET | `/api/auth/users/{id}/permissions` | `user:manage` | 用户权限详情 |
+| GET | `/api/auth/users/{id}/projects` | `user:manage` | 用户项目列表 |
+| GET | `/api/auth/permissions` | 公开 | 权限定义表 |
+| GET | `/api/audit` | `audit:view` | 审计日志查询 |
+| GET | `/api/audit/stats` | `audit:view` | 审计统计 |
+| GET | `/api/audit/actions` | `audit:view` | 操作类型列表 |
+
+### 6.6 前端组件树
+
+```
+App.tsx
+├── [未登录] LoginPage.tsx          🆕 用户选择页
+│   └── 用户列表（从 /api/auth/list）
+└── [已登录] 主界面
+    ├── 侧边栏
+    │   ├── NAV 导航（现有 6 项）
+    │   ├── [admin] 「管理」分组     🆕
+    │   │   ├── 用户管理 → UserManagement.tsx 🆕
+    │   │   └── 审计日志 → AuditLog.tsx       🆕
+    │   └── UserSelect.tsx          🆕 用户切换（底部）
+    ├── Home.tsx（项目看板）
+    │   └── [admin] 项目归属用户标签 🆕
+    ├── UserManagement.tsx           🆕
+    │   ├── 用户列表卡片
+    │   ├── 新增/编辑表单
+    │   │   ├── 角色选择（admin/user）
+    │   │   ├── 项目多选
+    │   │   └── 危险权限勾选框
+    │   └── 点击项目标签 → 跳转项目
+    └── AuditLog.tsx                 🆕
+        ├── 统计卡片
+        ├── 筛选栏（操作类型/天数）
+        └── 日志表格
+```
+
+### 6.7 关键设计决策
+
+| 决策 | 选择 | 理由 |
+|------|------|------|
+| 存储 | 纯 JSON 文件（非 MySQL） | 用户量小（<50），无需数据库；与现有文件式架构一致 |
+| 认证 | X-User-Id Header | localhost 信任边界内最简方案 |
+| 权限模型 | RBAC + custom_permissions 叠加 | 灵活性 + 简单性平衡 |
+| 审计存储 | JSONL 追加 | 不可变追加 + 易 grep 分析 |
+| 文件并发 | fcntl.flock | 防并发写丢数据 |
+| 审计轮转 | 10000 行自动归档 | 防止文件无限增长 |
 
 ## 9. 架构沉淀建议
 

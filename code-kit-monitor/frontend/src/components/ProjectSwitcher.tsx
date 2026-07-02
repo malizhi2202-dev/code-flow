@@ -42,7 +42,7 @@ export default function ProjectSwitcher({ collapsed }: { collapsed: boolean }) {
           <div style={{
             position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 100,
             background: 'var(--bg-card)', border: '1px solid var(--border-strong)',
-            borderRadius: 'var(--r-md)', minWidth: 180, zIndex: 100,
+            borderRadius: 'var(--r-md)', minWidth: 180,
             boxShadow: 'var(--shadow-md)', padding: 4,
           }}>
             <div style={{ padding: '4px 8px', fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.04 }}>项目</div>

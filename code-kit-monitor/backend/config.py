@@ -31,8 +31,12 @@ def set_current_project(root: str):
         json.dump({"project_root": root}, f)
 
 
-def discover_projects() -> list[dict]:
-    """扫描父目录下所有包含 .specs/ 或 code-kit/ 的项目."""
+def discover_projects(user: dict | None = None) -> list[dict]:
+    """扫描父目录下所有包含 .specs/ 或 code-kit/ 的项目.
+
+    Args:
+        user: 可选，传入用户字典则按 project_ids 过滤（admin 不过滤）。
+    """
     projects = []
     scan_root = os.path.dirname(PROJECT_ROOT)
     try:
@@ -52,6 +56,15 @@ def discover_projects() -> list[dict]:
                 })
     except Exception:
         pass
+
+    # 按用户权限过滤
+    if user and user.get("role") != "admin":
+        allowed = set(user.get("project_ids", []))
+        if allowed:
+            projects = [p for p in projects if p["name"] in allowed]
+        else:
+            projects = []  # 普通用户未分配任何项目 = 无可见项目
+
     return projects
 
 

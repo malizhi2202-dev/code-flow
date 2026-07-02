@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from config import CORS_ORIGIN, HOST, PORT
+from auth import get_user, load_users
 from routes.changes import router as changes_router
 from routes.change_detail import router as detail_router
 from routes.artifact import router as artifact_router
@@ -14,6 +15,8 @@ from routes.search import router as search_router
 from routes.roles_api import router as roles_router
 from routes.admin_api import router as admin_router
 from routes.runtime_api import router as runtime_router
+from routes.auth_api import router as auth_router
+from routes.audit_api import router as audit_router
 
 
 @asynccontextmanager
@@ -34,12 +37,25 @@ app.add_middleware(
 )
 
 
-# AC-12: localhost 绑定中间件
+# 认证中间件：读取 X-User-Id header，注入 request.state.user
 @app.middleware("http")
-async def localhost_only(request: Request, call_next):
+async def auth_middleware(request: Request, call_next):
+    # localhost 安全检查
     host = request.client.host if request.client else "unknown"
     if host not in ("127.0.0.1", "localhost", "::1"):
         return JSONResponse({"error": "forbidden: localhost only"}, status_code=403)
+
+    # 加载用户：从 X-User-Id header 获取
+    # - 未传 header → 默认 admin（向后兼容）
+    # - 传了 header 但用户不存在 → 401（安全：不静默提权）
+    user_id = request.headers.get("X-User-Id")
+    if user_id:
+        user = get_user(user_id)
+        if not user:
+            return JSONResponse({"error": f"用户 '{user_id}' 不存在"}, status_code=401)
+    else:
+        user = get_user("admin")  # 默认 admin
+    request.state.user = user
     return await call_next(request)
 
 
@@ -53,6 +69,8 @@ app.include_router(search_router)
 app.include_router(roles_router)
 app.include_router(admin_router)
 app.include_router(runtime_router)
+app.include_router(auth_router)
+app.include_router(audit_router)
 
 
 @app.get("/api/ping")

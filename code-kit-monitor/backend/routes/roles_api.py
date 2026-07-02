@@ -1,8 +1,9 @@
 """GET/PUT /api/roles — 角色管理."""
 import os
 import json
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 from config import get_specs_dir
+from auth import get_current_user, has_permission, write_audit
 
 router = APIRouter()
 ROLES_FILE = os.path.join(os.path.dirname(get_specs_dir()), ".specs", "roles.json")
@@ -35,6 +36,9 @@ async def get_roles():
 
 @router.put("/api/roles/{role_id}")
 async def update_role(role_id: str, request: Request):
+    user = get_current_user(request)
+    if not has_permission(user, "project:write"):
+        raise HTTPException(status_code=403, detail="需要权限: project:write")
     body = await request.json()
     data = _load()
     for r in data["roles"]:
@@ -43,12 +47,17 @@ async def update_role(role_id: str, request: Request):
                 if k in r:
                     r[k] = v
             _save(data)
+            write_audit(user, "project:write", role_id, "role",
+                        f"更新角色 {r.get('name', role_id)}", request=request)
             return {"ok": True, "role": r}
     return {"ok": False, "error": "not found"}, 404
 
 
 @router.post("/api/roles")
 async def create_role(request: Request):
+    user = get_current_user(request)
+    if not has_permission(user, "project:write"):
+        raise HTTPException(status_code=403, detail="需要权限: project:write")
     body = await request.json()
     data = _load()
     new_role = {
@@ -62,12 +71,21 @@ async def create_role(request: Request):
     }
     data["roles"].append(new_role)
     _save(data)
+    write_audit(user, "project:write", new_role["id"], "role",
+                f"创建角色 {new_role['name']}", request=request)
     return {"ok": True, "role": new_role}
 
 
 @router.delete("/api/roles/{role_id}")
-async def delete_role(role_id: str):
+async def delete_role(role_id: str, request: Request):
+    user = get_current_user(request)
+    if not has_permission(user, "project:delete"):
+        raise HTTPException(status_code=403, detail="需要权限: project:delete")
     data = _load()
+    deleted = next((r for r in data["roles"] if r["id"] == role_id), None)
     data["roles"] = [r for r in data["roles"] if r["id"] != role_id]
     _save(data)
+    if deleted:
+        write_audit(user, "project:delete", role_id, "role",
+                    f"删除角色 {deleted.get('name', role_id)}", request=request)
     return {"ok": True}
