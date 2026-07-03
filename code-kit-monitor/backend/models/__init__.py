@@ -1,0 +1,14 @@
+"""ORM 模型基类."""
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+from models.tool import Tool  # noqa: E402, F401
+from models.workflow import Workflow, WorkflowSnapshot  # noqa: E402, F401
+from models.agent import Agent  # noqa: E402, F401
+from models.metrics import MetricRaw  # noqa: E402, F401
+from models.project import Project  # noqa: E402, F401
+from models.role_custom import CustomRole  # noqa: E402, F401

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, GitBranch, Users, FileText, Settings, Layers, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon, AlertCircle } from 'lucide-react';
+import { Activity, GitBranch, Users, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon, AlertCircle, Wrench, Bot, Network, FolderKanban, BarChart3, Link2 } from 'lucide-react';
 import Home from './pages/Home';
 import Detail from './pages/Detail';
 import Roles from './pages/Roles';
@@ -11,7 +11,16 @@ import UserManagement from './pages/UserManagement';
 import AuditLog from './pages/AuditLog';
 import LoginPage from './pages/LoginPage';
 import UserCenter from './pages/UserCenter';
-import ProjectSwitcher from './components/ProjectSwitcher';
+import ToolMarket from './pages/ToolMarket';
+import WorkflowList from './pages/WorkflowList';
+import RoleMarket from './pages/RoleMarket';
+import AssemblyView from './pages/AssemblyView';
+import AgentBuilder from './pages/AgentBuilder';
+import OrchestrationPage from './pages/OrchestrationPage';
+import SecurityPage from './pages/SecurityPage';
+import MonitoringDashboard from './pages/MonitoringDashboard';
+import ProjectManager from './pages/ProjectManager';
+import ProjectDetail from './pages/ProjectDetail';
 import UserArea from './components/UserSelect';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useAuth } from './stores/auth';
@@ -28,12 +37,15 @@ function EmptyPerm() {
 
 type NavItem = { id: string; label: string; icon: React.ReactNode };
 const NAV: NavItem[] = [
-  { id: 'home', label: '项目看板', icon: <Activity size={16} /> },
-  { id: 'specs', label: '文档中心', icon: <Layers size={16} /> },
-  { id: 'runtime', label: '消耗统计', icon: <Activity size={16} /> },
-  { id: 'workflow', label: '流程配置', icon: <GitBranch size={16} /> },
-  { id: 'roles', label: '专家管理', icon: <Users size={16} /> },
-  { id: 'docs', label: '规则引擎', icon: <FileText size={16} /> },
+  { id: 'tools', label: '工具库', icon: <Wrench size={16} /> },
+  { id: 'workflows', label: '工作流', icon: <GitBranch size={16} /> },
+  { id: 'roles-page', label: '角色', icon: <Users size={16} /> },
+  { id: 'assembly', label: '组装', icon: <Link2 size={16} /> },
+  { id: 'agents', label: 'Agent', icon: <Bot size={16} /> },
+  { id: 'orchestration', label: '编排', icon: <Network size={16} /> },
+  { id: 'security', label: '安全', icon: <Shield size={16} /> },
+  { id: 'monitor', label: '监控', icon: <BarChart3 size={16} /> },
+  { id: 'projects', label: '项目', icon: <FolderKanban size={16} /> },
 ];
 
 const ADMIN_NAV: NavItem[] = [
@@ -49,15 +61,24 @@ type View =
   | { page: 'workflow' }
   | { page: 'roles' }
   | { page: 'docs' }
+  | { page: 'tools' }
+  | { page: 'workflows' }
+  | { page: 'roles-page' }
+  | { page: 'assembly' }
+  | { page: 'agents' }
+  | { page: 'orchestration' }
+  | { page: 'security' }
+  | { page: 'monitor' }
+  | { page: 'projects' }
   | { page: 'users' }
   | { page: 'audit' }
   | { page: 'profile' };
 
 export default function App() {
-  const [nav, setNav] = useState('home');
+  const [nav, setNav] = useState('projects');
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [projectDetailId, setProjectDetailId] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
-  const [summary, setSummary] = useState<any>(null);
   const { isAdmin, rolePermissions, fetchMe, fetchUsers, loaded } = useAuth();
 
   // 未登录 → 显示登录页
@@ -73,23 +94,8 @@ export default function App() {
     });
   }, []);
 
-  useEffect(() => {
-    fetch('/api/changes').then(r => r.json()).then(d => setSummary(d.summary)).catch(() => {});
-    const t = setInterval(() => {
-      fetch('/api/changes').then(r => r.json()).then(d => setSummary(d.summary)).catch(() => {});
-    }, 10000);
-    return () => clearInterval(t);
-  }, []);
-
-  // ── 按权限过滤导航 ──
   const perm = (p: string) => isAdmin || rolePermissions.includes(p);
-  const visibleNav = NAV.filter(item => {
-    switch (item.id) {
-      case 'home': case 'specs': case 'runtime': return perm('project:read');
-      case 'workflow': case 'roles': case 'docs': return perm('project:write');
-      default: return true;
-    }
-  });
+  const visibleNav = NAV;
   const visibleAdminNav = ADMIN_NAV.filter(item => {
     switch (item.id) {
       case 'users': return perm('user:manage');
@@ -106,6 +112,7 @@ export default function App() {
   const openDetail = (changeId: string) => setDetailId(changeId);
 
   const renderContent = () => {
+    if (projectDetailId) return <ProjectDetail projectId={projectDetailId} onBack={() => setProjectDetailId(null)} />;
     if (detailId) return <Detail changeId={detailId} onBack={() => setDetailId(null)} />;
     switch (nav) {
       case 'home': return <Home onSelect={openDetail} />;
@@ -116,8 +123,17 @@ export default function App() {
       case 'docs': return perm('project:write') ? <DocEditor /> : <EmptyPerm />;
       case 'users': return perm('user:manage') ? <UserManagement /> : <EmptyPerm />;
       case 'audit': return perm('audit:view') ? <AuditLog /> : <EmptyPerm />;
-      case 'profile': return <UserCenter onBack={() => navigate('home')} />;
-      default: return <Home onSelect={openDetail} />;
+      case 'tools': return perm('project:read') ? <ToolMarket /> : <EmptyPerm />;
+      case 'workflows': return perm('project:write') ? <WorkflowList /> : <EmptyPerm />;
+      case 'roles-page': return perm('project:read') ? <RoleMarket /> : <EmptyPerm />;
+      case 'assembly': return perm('project:write') ? <AssemblyView /> : <EmptyPerm />;
+      case 'agents': return perm('project:read') ? <AgentBuilder /> : <EmptyPerm />;
+      case 'orchestration': return perm('project:write') ? <OrchestrationPage /> : <EmptyPerm />;
+      case 'security': return perm('project:read') ? <SecurityPage /> : <EmptyPerm />;
+      case 'monitor': return perm('project:read') ? <MonitoringDashboard /> : <EmptyPerm />;
+      case 'projects': return perm('project:read') ? <ProjectManager onSelect={(id) => setProjectDetailId(id)} /> : <EmptyPerm />;
+      case 'profile': return <UserCenter onBack={() => navigate('projects')} />;
+      default: return <ProjectManager onSelect={(id) => setProjectDetailId(id)} />;
     }
   };
 
@@ -135,12 +151,7 @@ export default function App() {
         {/* Logo */}
         <div style={{ padding: collapsed ? '12px 10px' : '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ color: 'var(--blue)', fontWeight: 800, fontSize: 16, flexShrink: 0 }}>◈</span>
-          {!collapsed && <span style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>code-kit</span>}
-        </div>
-
-        {/* 项目切换 */}
-        <div style={{ padding: '8px', borderBottom: '1px solid var(--border)' }}>
-          <ProjectSwitcher collapsed={collapsed} />
+          {!collapsed && <span style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}>AI 开发平台</span>}
         </div>
 
         {/* 导航 */}
@@ -201,12 +212,6 @@ export default function App() {
         {/* 底部：用户信息 + 登出 + 状态 + 折叠 */}
         <div style={{ padding: '8px', borderTop: '1px solid var(--border)' }}>
           <UserArea collapsed={collapsed} onNavigateProfile={() => navigate('profile')} />
-          {!collapsed && summary && (
-            <div style={{ padding: '4px 8px', marginTop: 6, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              <div><span className="dot dot-green" style={{ marginRight: 4 }} />{summary.active_changes} active</div>
-              <div style={{ marginTop: 2 }}>{summary.done_tasks}/{summary.total_tasks} tasks</div>
-            </div>
-          )}
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="btn btn-ghost btn-sm"
