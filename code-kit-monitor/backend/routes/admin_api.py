@@ -204,3 +204,22 @@ async def switch_project(request: Request):
     write_audit(user, "project:read", os.path.basename(root), "project",
                 f"切换到项目 {root}", request=request)
     return {"ok": True, "current": CURRENT_PROJECT}
+
+
+# ── 全局安全配置 ──
+from services.security_service import DEFAULT_SECURITY
+_security_config = dict(DEFAULT_SECURITY)
+
+
+@router.get("/api/admin/security-config")
+def api_get_security_config(request: Request = None):
+    return {"config": _security_config}
+
+
+@router.put("/api/admin/security-config")
+def api_update_security_config(payload: dict, request: Request = None):
+    global _security_config
+    for k, v in payload.items():
+        if k in _security_config:
+            _security_config[k] = v
+    return {"config": _security_config, "status": "saved"}

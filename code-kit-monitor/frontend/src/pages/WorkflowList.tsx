@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Plus, Play, Trash2, GitBranch } from 'lucide-react';
+import { Plus, Trash2, GitBranch, BarChart3 } from 'lucide-react';
 import { useWorkflows } from '../stores/workflows';
 import { useTools } from '../stores/tools';
 import ConfirmDialog from '../components/ConfirmDialog';
+import EntityMonitor from '../components/EntityMonitor';
 
 export default function WorkflowList() {
   const { workflows, fetchWorkflows, createWorkflow, deleteWorkflow, publishWorkflow, executeWorkflow, loading } = useWorkflows();
   const { tools, fetchTools } = useTools();
   const [showCreate, setShowCreate] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [monitorWf, setMonitorWf] = useState<any>(null);
   const [form, setForm] = useState({ name: '', description: '' });
 
   useEffect(() => { fetchWorkflows(); fetchTools(); }, []);
@@ -42,7 +44,8 @@ export default function WorkflowList() {
                 </div>
                 <div style={{ display: 'flex', gap: 4 }}>
                   {wf.status === 'draft' && <button onClick={() => publishWorkflow(wf.id)} style={{ padding: '4px 8px', background: 'var(--color-success)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>发布</button>}
-                  {wf.status === 'published' && <button onClick={() => executeWorkflow(wf.id)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-success)' }} title="执行"><Play size={14} /></button>}
+                  {wf.status === 'published' && <span style={{ fontSize: 10, color: 'var(--text-dim)', padding: '2px 6px', background: 'var(--bg-input)', borderRadius: 3 }}>通过 Agent 运行</span>}
+                  <button onClick={() => setMonitorWf(wf)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }} title="监控"><BarChart3 size={14} /></button>
                   {wf.status !== 'running' && <button onClick={() => setDeleteId(wf.id)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)' }} title="删除"><Trash2 size={14} /></button>}
                 </div>
               </div>

@@ -23,6 +23,8 @@ from routes.agents_api import router as agents_router
 from routes.orchestration_api import router as orchestration_router
 from routes.metrics_api import router as metrics_router
 from routes.projects_api import router as projects_router
+from routes.roles_custom_api import router as roles_custom_router
+from routes.assembly_api import router as assembly_router
 
 
 @asynccontextmanager
@@ -34,9 +36,9 @@ async def lifespan(app: FastAPI):
         print("[monitor] 数据库表已就绪")
     except Exception as e:
         print(f"[monitor] 数据库初始化跳过（可能 MySQL 未启动）: {e}")
-    # 启动运行时 metrics 调度器（每 3 分钟注入模拟数据）
-    from services.metrics_scheduler import start_scheduler
-    start_scheduler("admin", interval_seconds=180)
+    # 启动 runtime.jsonl 文件监控器（每 30s 增量导入 code-kit 运行时数据）
+    from services.runtime_watcher import start_watcher
+    start_watcher()
     yield
     print("[monitor] 关闭.")
 
@@ -92,6 +94,8 @@ app.include_router(agents_router)
 app.include_router(orchestration_router)
 app.include_router(metrics_router)
 app.include_router(projects_router)
+app.include_router(roles_custom_router)
+app.include_router(assembly_router)
 
 
 @app.get("/api/ping")

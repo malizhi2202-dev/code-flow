@@ -55,6 +55,26 @@ def api_get_live(minutes: int = 10, request: Request = None, db: Session = Depen
     }
 
 
+@router.get("/entity-breakdown")
+def api_entity_breakdown(minutes: int = 1440, request: Request = None, db: Session = Depends(get_db)):
+    """按实体名聚合——展示哪个工具/工作流/Agent 消耗了多少 token."""
+    from models.metrics import SessionMetric
+    from sqlalchemy import func
+    from datetime import datetime, timedelta
+    since = datetime.utcnow() - timedelta(minutes=minutes)
+
+    def _agg(entity_type: str) -> list[dict]:
+        rows = db.query(SessionMetric.tool_name, func.sum(SessionMetric.total_tokens).label('tokens'), func.count(SessionMetric.id).label('calls'), func.sum(SessionMetric.duration_ms).label('ms')).filter(SessionMetric.entity_type == entity_type, SessionMetric.timestamp >= since, SessionMetric.tool_name != '').group_by(SessionMetric.tool_name).order_by(func.sum(SessionMetric.total_tokens).desc()).limit(20).all()
+        return [{"name": r.tool_name, "tokens": int(r.tokens or 0), "calls": int(r.calls or 0), "total_ms": int(r.ms or 0)} for r in rows]
+
+    return {
+        "tools": _agg("tool"),
+        "workflows": _agg("workflow"),
+        "agents": _agg("agent"),
+        "projects": _agg("project"),
+    }
+
+
 @router.post("/record")
 def api_record_metric(payload: dict, request: Request = None, db: Session = Depends(get_db)):
     user = request.state.user if request else None

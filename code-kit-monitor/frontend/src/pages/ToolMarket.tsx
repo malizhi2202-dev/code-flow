@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Download, Trash2, Wrench, Zap, Link, Search, FileText, Sparkles, Upload, Eye, Edit3, Save } from 'lucide-react';
+import { Plus, Download, Trash2, Wrench, Zap, Link, Search, FileText, Sparkles, Upload, Eye, Edit3, Save, BarChart3 } from 'lucide-react';
 import { useTools, Tool } from '../stores/tools';
 import ConfirmDialog from '../components/ConfirmDialog';
+import EntityMonitor from '../components/EntityMonitor';
 
 const TYPE_ICONS: Record<string, React.ReactNode> = { plugin: <Wrench size={16} />, skill: <Zap size={16} />, mcp: <Link size={16} /> };
 const TYPE_LABELS: Record<string, string> = { plugin: 'Plugin', skill: 'Skill', mcp: 'MCP' };
@@ -15,6 +16,7 @@ export default function ToolMarket() {
   const [editId, setEditId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const [monitorTool, setMonitorTool] = useState<Tool | null>(null);
 
   // 自然语言生成
   const [showNL, setShowNL] = useState(false);
@@ -107,6 +109,7 @@ export default function ToolMarket() {
                   ) : (
                     <button onClick={() => startEdit(tool)} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }} title="编辑 Markdown"><Edit3 size={14} /></button>
                   )}
+                  <button onClick={() => setMonitorTool(tool)} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }} title="监控"><BarChart3 size={14} /></button>
                   <button onClick={() => window.open(`/api/tools/${tool.id}/demo`)} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }} title="下载 demo"><Download size={14} /></button>
                   <button onClick={() => setDeleteId(tool.id)} style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)' }} title="删除"><Trash2 size={14} /></button>
                 </div>
@@ -175,6 +178,7 @@ export default function ToolMarket() {
         </div>
       )}
       {deleteId && <ConfirmDialog open={true} title="确认删除" message="确定删除此工具？" onConfirm={async () => { await deleteTool(deleteId); setDeleteId(null); }} onCancel={() => setDeleteId(null)} />}
+      {monitorTool && <EntityMonitor entityType="tool" entityId={monitorTool.id} entityName={monitorTool.name} onClose={() => setMonitorTool(null)} />}
     </div>
   );
 }

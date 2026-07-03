@@ -98,29 +98,17 @@ def api_publish_workflow(workflow_id: int, request: Request = None, db: Session 
     return wf.to_dict()
 
 
-@router.post("/{workflow_id}/execute")
-def api_execute_workflow(workflow_id: int, request: Request = None, db: Session = Depends(get_db)):
+@router.get("/{workflow_id}/agents")
+def api_workflow_agents(workflow_id: int, request: Request = None, db: Session = Depends(get_db)):
+    """查询绑定了此工作流的 Agent 列表。工作流必须通过 Agent 来执行。"""
+    from models.agent import Agent
     user = _user(request)
-    q = _filter_owner(db.query(Workflow).filter(Workflow.id == workflow_id), user)
-    wf = q.first()
-    if not wf:
-        raise HTTPException(status_code=404, detail="工作流不存在")
-    if wf.status not in ("published", "completed", "failed"):
-        raise HTTPException(status_code=400, detail="仅已发布的工作流可执行")
-    wf.status = "running"
-    db.commit()
-    log_audit(user["id"], user.get("name", user["id"]), "workflow.execute", wf.name, "workflow", "started", request.client.host if request.client else "127.0.0.1")
-    return {"status": "running", "workflow_id": wf.id, "spec": wf.spec_json}
+    q = db.query(Agent).filter(Agent.workflow_id == workflow_id)
+    if user.get("role") != "admin":
+        q = q.filter(Agent.owner_id == user["id"])
+    agents = q.all()
+    return {"agents": [a.to_dict() for a in agents], "total": len(agents)}
 
 
-@router.post("/{workflow_id}/stop")
-def api_stop_workflow(workflow_id: int, request: Request = None, db: Session = Depends(get_db)):
-    user = _user(request)
-    q = _filter_owner(db.query(Workflow).filter(Workflow.id == workflow_id), user)
-    wf = q.first()
-    if not wf:
-        raise HTTPException(status_code=404, detail="工作流不存在")
-    wf.status = "stopped"
-    db.commit()
-    log_audit(user["id"], user.get("name", user["id"]), "workflow.stop", wf.name, "workflow", "stopped", request.client.host if request.client else "127.0.0.1")
-    return {"status": "stopped"}
+# 工作流不独立执行/停止——必须通过 Agent 来运行。
+# Agent: POST /api/agents/:id/run → Agent 内部调用绑定的工作流
