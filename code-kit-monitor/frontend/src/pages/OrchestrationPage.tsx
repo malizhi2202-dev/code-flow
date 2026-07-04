@@ -41,6 +41,7 @@ export default function OrchestrationPage() {
   } = store;
 
   const [showYaml, setShowYaml] = useState(true); // true=yaml, false=md
+  const [yamlHeight, setYamlHeight] = useState(280); // YAML 面板高度（可拖拽调整）
   const [applyResult, setApplyResult] = useState<any>(null);
   const [validateResult, setValidateResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -51,6 +52,9 @@ export default function OrchestrationPage() {
   const canvasDirtyRef = useRef(false);
   const yamlDirtyRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const splitDragging = useRef(false);
+  const splitStartY = useRef(0);
+  const splitStartH = useRef(0);
 
   // Load existing orchestration or init default
   useEffect(() => {
@@ -213,6 +217,37 @@ export default function OrchestrationPage() {
     setValidateResult(result);
   };
 
+  // 分割线拖拽
+  const handleSplitMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    splitDragging.current = true;
+    splitStartY.current = e.clientY;
+    splitStartH.current = yamlHeight;
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  }, [yamlHeight]);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!splitDragging.current) return;
+      const dy = splitStartY.current - e.clientY;
+      const newH = Math.max(80, Math.min(600, splitStartH.current + dy));
+      setYamlHeight(newH);
+    };
+    const onUp = () => {
+      if (!splitDragging.current) return;
+      splitDragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
   const selectedEdge = selectedEdgeId ? edgeConfigs.get(selectedEdgeId) : null;
   const selectedEdgeObj = selectedEdgeId ? topologyState.edges.find((e) => e.id === selectedEdgeId) : null;
   const agentNames = topologyState.nodes.map((n) => n.data?.label || '');
@@ -307,13 +342,30 @@ export default function OrchestrationPage() {
         </div>
       </div>
 
-      {/* Bottom YAML/MD 抽屉 — Dify 风格，点击顶栏按钮展开 */}
+      {/* 可拖拽分割线（双击折叠/展开 YAML 面板） */}
+      <div
+        onMouseDown={handleSplitMouseDown}
+        onDoubleClick={() => { if (showYaml) { setShowYaml(false); } else { setShowYaml(true); if (yamlHeight < 80) setYamlHeight(240); } }}
+        style={{
+          height: 6, cursor: 'ns-resize',
+          background: showYaml ? 'var(--border)' : 'var(--bg-card)',
+          borderTop: '1px solid var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}
+        title="拖拽调整高度 · 双击折叠/展开"
+      >
+        <div style={{ width: 40, height: 3, borderRadius: 2, background: 'var(--text-muted)', opacity: showYaml ? 0.4 : 0.15 }} />
+      </div>
+
+      {/* Bottom YAML/MD 面板 — 可拖拽调整高度 */}
       <div style={{
-        height: showYaml ? 240 : 0,
+        height: showYaml ? yamlHeight : 0,
         overflow: showYaml ? 'auto' : 'hidden',
-        transition: 'height 200ms var(--ease)',
-        borderTop: showYaml ? '1px solid var(--border)' : 'none',
+        transition: splitDragging.current ? 'none' : 'height 150ms var(--ease)',
+        borderTop: '1px solid var(--border)',
         background: 'var(--bg-card)',
+        flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 12px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
