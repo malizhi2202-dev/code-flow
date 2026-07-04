@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Trash2, ShieldAlert, Plus, X, ChartBarIncreasing, RefreshCw, Database, Link2, Wifi, WifiOff, ExternalLink } from 'lucide-react';
 import ChatWindow from '../components/ChatWindow';
 import ChannelConfigComponent from '../components/ChannelConfig';
+import EntityMonitor from '../components/EntityMonitor';
 
 var lbl: React.CSSProperties = { fontSize: 11, fontWeight: 500, color: 'var(--text-dim)', display: 'block', marginBottom: 4 };
 var inp: React.CSSProperties = { width: '100%', padding: '8px', background: 'var(--bg-input)', color: 'var(--color-text)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, boxSizing: 'border-box' };
@@ -435,10 +436,12 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
         </div>
       )}
 
-      {tab === 'monitor' && monData && (
+      {tab === 'monitor' && agent?.id && (
+        <EntityMonitor entityType="agent" entityId={agent.id} entityName={agent.name || 'Agent'} onClose={() => setTab('edit')} />
+      )}
+      {false && monData && (
         <div>
-          {/* 看板 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'none' }}>
             <div style={card}><div style={cardV}>{monData.sessions.reduce(function(s: number, x: any) { return s + (x.total_tokens || 0); }, 0).toLocaleString()}</div><div style={cardL}>总 Token 消耗</div></div>
             <div style={card}><div style={cardV}>{monData.sessions.length}</div><div style={cardL}>会话数</div></div>
             <div style={card}><div style={cardV}>{(monData.sessions.reduce(function(s: number, x: any) { return s + (x.duration_ms || 0); }, 0) / 1000).toFixed(1)}s</div><div style={cardL}>总执行时间</div></div>
