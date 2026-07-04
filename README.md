@@ -1,3 +1,10 @@
+<p align="center">
+  <a href="?lang=zh" style="font-size:18px;font-weight:bold;text-decoration:none;padding:8px 20px;margin:0 8px;border:2px solid #548cf0;border-radius:6px;color:#548cf0;">🇨🇳 中文版</a>
+  <a href="./README.en.md" style="font-size:18px;font-weight:bold;text-decoration:none;padding:8px 20px;margin:0 8px;border:2px solid #548cf0;border-radius:6px;color:#548cf0;">🇺🇸 English</a>
+</p>
+
+---
+
 # code-kit-platform / code-kit 平台
 
 > **全栈 AI 开发平台** — 从需求到归档的 Agent 编排 + 可视化监控面板
