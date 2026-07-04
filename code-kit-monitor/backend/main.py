@@ -26,6 +26,8 @@ from routes.projects_api import router as projects_router
 from routes.roles_custom_api import router as roles_custom_router
 from routes.assembly_api import router as assembly_router
 from routes.agent_knowledge_api import router as agent_knowledge_router
+from routes.chat_api import router as chat_router
+from routes.channel_api import router as channel_router
 
 
 @asynccontextmanager
@@ -98,6 +100,8 @@ app.include_router(projects_router)
 app.include_router(roles_custom_router)
 app.include_router(agent_knowledge_router)
 app.include_router(assembly_router)
+app.include_router(chat_router)
+app.include_router(channel_router)
 
 
 @app.get("/api/ping")

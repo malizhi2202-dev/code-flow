@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, GitBranch, Users, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon, AlertCircle, Wrench, Bot, Network, FolderKanban, BarChart3, Link2 } from 'lucide-react';
+import { Activity, GitBranch, Users, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon, AlertCircle, Wrench, Bot, Network, FolderKanban, BarChart3, Link2, MessageSquare } from 'lucide-react';
 import Home from './pages/Home';
 import Detail from './pages/Detail';
 import Roles from './pages/Roles';
@@ -25,6 +25,7 @@ import OrchestrationListPage from './pages/OrchestrationListPage';
 import OrchDocPage from './pages/OrchDocPage';
 import TemplateMarket from './pages/TemplateMarket';
 import MonitoringDashboard from './pages/MonitoringDashboard';
+import ConversationCenter from './pages/ConversationCenter';
 import ProjectManager from './pages/ProjectManager';
 import ProjectDetail from './pages/ProjectDetail';
 import UserArea from './components/UserSelect';
@@ -47,6 +48,7 @@ const NAV: NavItem[] = [
   { id: 'workflows', label: '工作流', icon: <GitBranch size={16} /> },
   { id: 'roles-page', label: '角色', icon: <Users size={16} /> },
   { id: 'agents', label: 'Agent', icon: <Bot size={16} /> },
+  { id: 'chat', label: '💬 对话中心', icon: <MessageSquare size={16} /> },
   { id: 'orchestration', label: '编排', icon: <Network size={16} /> },
   { id: 'monitor', label: '监控', icon: <BarChart3 size={16} /> },
   { id: 'projects', label: '项目', icon: <FolderKanban size={16} /> },
@@ -197,6 +199,7 @@ export default function App() {
       case 'workflows': return perm('project:write') ? <WorkflowList onSelect={function(id) { setWorkflowDetailId(id); }} onCreate={() => setShowWorkflowCreate(true)} /> : <EmptyPerm />;
       case 'roles-page': return perm('project:read') ? <RoleMarket onSelectRole={(r) => setRoleDetail(r)} /> : <EmptyPerm />;
       case 'agents': return perm('project:read') ? <AgentBuilder onSelect={(a) => setAgentDetail(a)} /> : <EmptyPerm />;
+      case 'chat': return perm('project:read') ? <ConversationCenter /> : <EmptyPerm />;
       case 'orchestration': {
         if (!perm('project:write')) return <EmptyPerm />;
         const path = window.location.pathname;
