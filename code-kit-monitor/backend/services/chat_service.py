@@ -9,6 +9,7 @@ from models.conversation import Conversation
 from models.message import Message
 from services.encryption_service import encrypt, decrypt
 from services.audit_service import log_audit
+from services.runtime_tracer import tracer
 
 _ATTACK_PREFIXES = [
     "ignore all previous instructions",
@@ -114,6 +115,17 @@ class ChatService:
                 if resp.status >= 400:
                     raise RuntimeError(f"LLM API 返回 {resp.status}")
                 reply = data["choices"][0]["message"]["content"]
+                # 运行时埋点：记录真实 token 消耗
+                usage = data.get("usage", {})
+                tracer.trace_model_call(
+                    entity_type="agent", entity_id=agent_id, owner_id=owner_id,
+                    model_name=agent.model_name or "unknown",
+                    prompt_tokens=usage.get("prompt_tokens", len(content) // 4),
+                    completion_tokens=usage.get("completion_tokens", len(reply) // 4),
+                    duration_ms=0,
+                    tool_name="chat", tool_calls=1,
+                    status="success"
+                )
             else:
                 reply = f"[Agent {agent.name}]: 收到消息「{content[:100]}」，但 model_provider={agent.model_provider} 暂不支持。"
         except Exception as e:
