@@ -84,8 +84,9 @@ async def channel_webhook(
 
     # 5. 签名校验
     if not adapter.validate_request(headers, body, credentials):
-        log_audit(db, cfg.owner_id, "channel_webhook_fail", cfg.agent_id,
-                  f"channel={channel_type} reason=signature_fail")
+        log_audit(cfg.owner_id, cfg.owner_id, "channel_webhook_fail", str(cfg.agent_id),
+                  "agent", f"channel={channel_type} reason=signature_fail",
+                  request.client.host if request.client else "127.0.0.1", "error")
         raise HTTPException(status_code=401, detail="签名校验失败")
 
     # 6. 解析消息

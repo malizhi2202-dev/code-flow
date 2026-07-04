@@ -91,7 +91,8 @@ class ChatService:
         db.refresh(agent_msg)
 
         # 6. 构造 prompt（角色标记隔离）
-        messages = [{"role": "system", "content": agent.system_prompt or "You are a helpful assistant."}]
+        system_prompt = getattr(agent, "system_prompt", None) or agent.description or "You are a helpful assistant."
+        messages = [{"role": "system", "content": system_prompt}]
         user_content = content
         if was_truncated:
             user_content += "\n\n[系统提示：你的消息超过长度限制，以上基于前 {} 字符回复]".format(MAX_MESSAGE_LENGTH)
@@ -119,7 +120,7 @@ class ChatService:
             agent_msg.content = "Agent 暂时无法回复，请稍后重试"
             agent_msg.status = "error"
             db.commit()
-            log_audit(db, owner_id, "agent_chat_error", agent_id, f"LLM error: {str(e)[:200]}")
+            log_audit(owner_id, owner_id, "agent_chat_error", str(agent_id), "agent", f"LLM error: {str(e)[:200]}", "127.0.0.1", "error")
             return {
                 "user_message": user_msg.to_dict(),
                 "agent_message": agent_msg.to_dict(),
@@ -135,10 +136,11 @@ class ChatService:
         db.refresh(agent_msg)
 
         # 9. 审计日志
-        log_audit(db, owner_id, "agent_chat", agent_id,
+        log_audit(owner_id, owner_id, "agent_chat", str(agent_id), "agent",
                   f"conv={conv.id} channel={channel_type} in={len(content)} out={len(reply)}"
                   + (" [truncated]" if was_truncated else "")
-                  + (" [attack_hit]" if attack_hit else ""))
+                  + (" [attack_hit]" if attack_hit else ""),
+                  "127.0.0.1")
 
         return {
             "user_message": user_msg.to_dict(),
