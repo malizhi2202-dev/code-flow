@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Download, Trash2, Wrench, Zap, Link, Search, BarChart3, Sparkles, Upload } from 'lucide-react';
+import { Plus, Download, Trash2, Wrench, Zap, Link, Search, BarChart3, Upload } from 'lucide-react';
 import { useTools, Tool } from '../stores/tools';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EntityMonitor from '../components/EntityMonitor';
@@ -15,11 +15,6 @@ export default function ToolMarket({ onSelect }: Props) {
   var [search, setSearch] = useState('');
   var [deleteId, setDeleteId] = useState<number | null>(null);
   var [monitorTool, setMonitorTool] = useState<Tool | null>(null);
-  var [showNL, setShowNL] = useState(false);
-  var [nlDesc, setNlDesc] = useState('');
-  var [nlType, setNlType] = useState('plugin');
-  var [generating, setGenerating] = useState(false);
-  var [generated, setGenerated] = useState<any>(null);
 
   useEffect(function() { fetchTools(typeFilter || undefined); }, [typeFilter]);
 
@@ -34,10 +29,7 @@ export default function ToolMarket({ onSelect }: Props) {
             <Upload size={13} /> 上传 MD
             <input type="file" accept=".md,.markdown" onChange={function(e) { var f = e.target.files?.[0]; if (f) { var r = new FileReader(); r.onload = function() { if (onSelect) onSelect({ name: f.name.replace('.md',''), type: 'plugin', description: '', content_md: r.result as string, token_soft_limit: 80000, token_hard_limit: 100000, permissions: ['read'], gate_pre: '', gate_post: '', io_filter: 'none' }); }; r.readAsText(f); } }} style={{ display: 'none' }} />
           </label>
-          <button onClick={function() { setShowNL(true); setNlDesc(''); setGenerated(null); }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 14px', background: 'var(--bg-card)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>
-            <Sparkles size={13} /> 自然语言生成
-          </button>
-          <button onClick={function() { if (onSelect) onSelect({ name: '', type: 'plugin', description: '', content_md: '', token_soft_limit: 80000, token_hard_limit: 100000, permissions: ['read'], gate_pre: '', gate_post: '', io_filter: 'none' }); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>
+<button onClick={function() { if (onSelect) onSelect({ name: '', type: 'plugin', description: '', content_md: '', token_soft_limit: 80000, token_hard_limit: 100000, permissions: ['read'], gate_pre: '', gate_post: '', io_filter: 'none' }); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>
             <Plus size={14} /> 创建工具
           </button>
         </div>
@@ -86,26 +78,7 @@ export default function ToolMarket({ onSelect }: Props) {
           {filtered.length === 0 && <p style={{ color: 'var(--text-dim)', gridColumn: '1/-1', textAlign: 'center', padding: 40 }}>暂无工具，点击「创建工具」开始</p>}
         </div>
       )}
-      {showNL && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: 24, width: 560, maxHeight: '85vh', overflow: 'auto' }}>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginTop: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Sparkles size={18} color="var(--color-primary)" /> 自然语言生成工具</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div><label style={lbl}>工具类型</label><select value={nlType} onChange={function(e) { setNlType(e.target.value); }} style={inp}><option value="plugin">Plugin</option><option value="skill">Skill</option><option value="mcp">MCP</option></select></div>
-              <div><label style={lbl}>描述你想要的工具</label><textarea value={nlDesc} onChange={function(e) { setNlDesc(e.target.value); }} rows={4} style={{ ...inp, resize: 'vertical' }} placeholder="例：我需要一个查询天气的 MCP 接口，输入城市名，返回温度、湿度、天气描述" /></div>
-              <button onClick={async function() { setGenerating(true); var r = await fetch('/api/tools/generate-from-text', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': localStorage.getItem('current_user_id') || 'admin' }, body: JSON.stringify({ description: nlDesc, type: nlType }) }); var d = await r.json(); setGenerated(d); setGenerating(false); }} disabled={!nlDesc.trim() || generating} style={{ padding: '10px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: nlDesc.trim() ? 'pointer' : 'not-allowed', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: nlDesc.trim() ? 1 : 0.5 }}>
-                {generating ? '⏳ 生成中...' : <><Sparkles size={14} /> 调用 qwen2:0.5b 生成</>}
-              </button>
-            </div>
-            {generated && <div style={{ marginTop: 16, padding: 12, background: 'var(--bg-card)', borderRadius: 6, border: '1px solid var(--green)', maxHeight: 300, overflow: 'auto' }}><div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{generated.content_md}</div></div>}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button onClick={function() { setShowNL(false); }} style={btn2}>取消</button>
-              {generated && <button onClick={function() { setShowNL(false); if (onSelect) onSelect({ name: generated.name || 'AI生成工具', type: nlType, description: '', content_md: generated.content_md || '', token_soft_limit: 80000, token_hard_limit: 100000, permissions: ['read'], gate_pre: '', gate_post: '', io_filter: 'none' }); }} style={btn1}>保存为工具</button>}
-            </div>
-          </div>
-        </div>
-      )}
-      {deleteId && <ConfirmDialog open={true} title="确认删除" message="确定删除此工具？" onConfirm={async function() { await deleteTool(deleteId); setDeleteId(null); }} onCancel={function() { setDeleteId(null); }} />}
+{deleteId && <ConfirmDialog open={true} title="确认删除" message="确定删除此工具？" onConfirm={async function() { await deleteTool(deleteId); setDeleteId(null); }} onCancel={function() { setDeleteId(null); }} />}
       {monitorTool && <EntityMonitor entityType="tool" entityId={monitorTool.id} entityName={monitorTool.name} onClose={function() { setMonitorTool(null); }} />}
     </div>
   );

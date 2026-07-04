@@ -64,9 +64,9 @@ spec:
       spec:
         runtime: langchain
         model:
-          provider: ollama
-          name: qwen2:0.5b
-          api_key_ref: env://OLLAMA_API_KEY
+          provider: openai
+          name: gpt-4o
+          api_key_ref: env://OPENAI_API_KEY
         workflow_id: 2
   routes:
     - from: reviewer

@@ -7,7 +7,7 @@
 - **当前活跃 Change**：—
 - **当前阶段**：—
 - **当前 Task**：—
-- **已归档**：`code-kit-monitor`（54 task ✅）、`ai-dev-platform`（27 task ✅）、`agent-k8s-orchestration`（20 task ✅）
+- **已归档**：`code-kit-monitor`（54 task ✅）、`ai-dev-platform`（27 task ✅）、`agent-k8s-orchestration`（20 task ✅）、`remove-ollama-default`（3 task ✅）
 
 ## 中断任务
 

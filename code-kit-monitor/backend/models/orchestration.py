@@ -14,6 +14,7 @@ class OrchestrationInstance(Base):
     owner_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     yaml_raw: Mapped[str] = mapped_column(Text, nullable=False)
+    edges_json: Mapped[dict] = mapped_column(JSON, default=list)  # 连线配置数组
     status: Mapped[str] = mapped_column(
         String(16), default="draft", index=True
     )  # draft|pending|running|converging|success|failed|degraded

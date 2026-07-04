@@ -21,6 +21,8 @@ import RoleDetail from './pages/RoleDetail';
 import AgentBuilder from './pages/AgentBuilder';
 import AgentDetail from './pages/AgentDetail';
 import OrchestrationPage from './pages/OrchestrationPage';
+import OrchestrationListPage from './pages/OrchestrationListPage';
+import OrchDocPage from './pages/OrchDocPage';
 import TemplateMarket from './pages/TemplateMarket';
 import MonitoringDashboard from './pages/MonitoringDashboard';
 import ProjectManager from './pages/ProjectManager';
@@ -76,7 +78,14 @@ type View =
   | { page: 'profile' };
 
 export default function App() {
-  const [nav, setNav] = useState('projects');
+  const getInitialNav = () => {
+    const path = window.location.pathname;
+    if (path.startsWith('/orchestration')) return 'orchestration';
+    if (path.startsWith('/agents')) return 'agents';
+    if (path.startsWith('/workflows')) return 'workflows';
+    return 'projects';
+  };
+  const [nav, setNav] = useState(getInitialNav);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [projectDetailId, setProjectDetailId] = useState<number | null>(null);
   const [workflowDetailId, setWorkflowDetailId] = useState<number | null>(null);
@@ -188,7 +197,17 @@ export default function App() {
       case 'workflows': return perm('project:write') ? <WorkflowList onSelect={function(id) { setWorkflowDetailId(id); }} onCreate={() => setShowWorkflowCreate(true)} /> : <EmptyPerm />;
       case 'roles-page': return perm('project:read') ? <RoleMarket onSelectRole={(r) => setRoleDetail(r)} /> : <EmptyPerm />;
       case 'agents': return perm('project:read') ? <AgentBuilder onSelect={(a) => setAgentDetail(a)} /> : <EmptyPerm />;
-      case 'orchestration': return perm('project:write') ? <OrchestrationPage /> : <EmptyPerm />;
+      case 'orchestration': {
+        if (!perm('project:write')) return <EmptyPerm />;
+        const path = window.location.pathname;
+        if (path === '/orchestration/new' || path.match(/\/orchestration\/\d+\/edit/)) {
+          return <OrchestrationPage />;
+        }
+        if (path.match(/\/orchestration\/\d+\/(md|yaml)/)) {
+          return <OrchDocPage />;
+        }
+        return <OrchestrationListPage />;
+      }
       case 'templates': return perm('project:read') ? <TemplateMarket /> : <EmptyPerm />;
       case 'monitor': return perm('project:read') ? <MonitoringDashboard /> : <EmptyPerm />;
       case 'projects': return perm('project:read') ? <ProjectManager onSelect={(id) => setProjectDetailId(id)} /> : <EmptyPerm />;

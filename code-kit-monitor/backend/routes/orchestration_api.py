@@ -26,12 +26,65 @@ def _uid(request: Request) -> str:
     return _user(request).get("id", "admin")
 
 
+def _status_color(status: str) -> str:
+    """编排实例状态 → 前端展示颜色."""
+    colors = {
+        "running": "#5cb878", "success": "#5cb878",
+        "failed": "#e05555", "crashed": "#e05555",
+        "degraded": "#e8a450", "pending": "#e8a450", "converging": "#e8a450",
+        "draft": "#5d6068", "stopped": "#5d6068",
+    }
+    return colors.get(status, "#5d6068")
+
+
+def _build_markdown(inst) -> str:
+    """从编排实例生成 Markdown 文档."""
+    import yaml as _yaml
+    try:
+        doc = _yaml.safe_load(inst.yaml_raw)
+    except Exception:
+        return f"# {inst.name}\n\n> YAML 解析失败"
+    meta = doc.get("metadata", {})
+    spec = doc.get("spec", {})
+    agents = spec.get("agents", [])
+    routes = spec.get("routes", [])
+    edges = inst.edges_json or []
+
+    lines = [f"# 编排: {meta.get('name', inst.name)}", ""]
+    lines.append(f"**状态**: {inst.status} | **更新时间**: {inst.updated_at.isoformat() if inst.updated_at else '-'}")
+    lines.append("")
+
+    lines.append("## Agent 列表")
+    lines.append("")
+    lines.append("| # | 名称 | Runtime | 模型 | Workflow ID |")
+    lines.append("|---|---|---|---|---|")
+    for i, a in enumerate(agents):
+        s = a.get("spec", {})
+        lines.append(f"| {i+1} | {a.get('name','-')} | {s.get('runtime','-')} | {s.get('model',{}).get('name','-')} | {s.get('workflow_id','-')} |")
+    lines.append("")
+
+    if routes:
+        lines.append("## 路由表")
+        lines.append("")
+        lines.append("| # | From | To | 类型 | 触发条件 | 描述 |")
+        lines.append("|---|---|---|---|---|---|")
+        for i, r in enumerate(routes):
+            edge = edges[i] if i < len(edges) else {}
+            lines.append(f"| {i+1} | {r.get('from','-')} | {r.get('to','-')} | {edge.get('type', r.get('type','-'))} | {edge.get('trigger_condition','-')} | {edge.get('description','-')} |")
+        lines.append("")
+
+    lines.append("## Token 限制")
+    lines.append(f"- 软限制: {inst.token_soft_limit:,} | 硬限制: {inst.token_hard_limit:,}")
+    return "\n".join(lines)
+
+
 # ── Apply / Validate ──
 
 @router.post("/apply")
 def api_apply(payload: dict, request: Request, db: Session = Depends(get_db)):
     """提交 YAML → 校验 → 创建/更新编排实例 + 拓扑快照 → 入调度队列."""
     yaml_raw = payload.get("yaml_raw", "")
+    edges_config = payload.get("edges_config", [])
     owner_id = _uid(request)
 
     result = validate_yaml(yaml_raw)
@@ -55,6 +108,7 @@ def api_apply(payload: dict, request: Request, db: Session = Depends(get_db)):
 
     if existing:
         existing.yaml_raw = yaml_raw
+        existing.edges_json = edges_config
         existing.agent_ids = agent_ids
         existing.priority = strategy.get("priority", 50)
         existing.token_soft_limit = strategy.get("token_soft_limit", 800000)
@@ -71,6 +125,7 @@ def api_apply(payload: dict, request: Request, db: Session = Depends(get_db)):
             owner_id=owner_id,
             name=name,
             yaml_raw=yaml_raw,
+            edges_json=edges_config,
             agent_ids=agent_ids,
             priority=strategy.get("priority", 50),
             token_soft_limit=strategy.get("token_soft_limit", 800000),
@@ -127,9 +182,12 @@ def api_list(request: Request, db: Session = Depends(get_db)):
     return [
         {
             "id": i.id, "name": i.name, "status": i.status,
+            "status_color": _status_color(i.status),
             "transition_status": i.transition_status,
             "agent_count": len(i.agent_ids or []),
-            "priority": i.priority, "created_at": i.created_at.isoformat(),
+            "priority": i.priority,
+            "created_at": i.created_at.isoformat() if i.created_at else None,
+            "updated_at": i.updated_at.isoformat() if i.updated_at else None,
         }
         for i in instances
     ]
@@ -224,6 +282,27 @@ def api_deploy_template(template_id: int, payload: dict, request: Request, db: S
 
     log_audit(_uid(request), _user(request).get("name", ""), "orchestration.apply", f"tpl:{template_id}", "template", f"deploy '{tpl.name}'", "127.0.0.1")
     return result
+@router.get("/{instance_id}/yaml")
+def api_get_yaml(instance_id: int, request: Request, db: Session = Depends(get_db)):
+    """返回编排实例的原始 YAML（Content-Type: text/yaml）."""
+    from fastapi.responses import PlainTextResponse
+    inst = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == instance_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="编排实例不存在")
+    return PlainTextResponse(content=inst.yaml_raw, media_type="text/yaml")
+
+
+@router.get("/{instance_id}/md")
+def api_get_md(instance_id: int, request: Request, db: Session = Depends(get_db)):
+    """返回编排实例的 Markdown 文档."""
+    from fastapi.responses import PlainTextResponse
+    inst = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == instance_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="编排实例不存在")
+    md = _build_markdown(inst)
+    return PlainTextResponse(content=md, media_type="text/markdown")
+
+
 @router.get("/{instance_id}")
 def api_detail(instance_id: int, request: Request, db: Session = Depends(get_db)):
     """编排实例详情 + 拓扑快照."""
@@ -237,8 +316,10 @@ def api_detail(instance_id: int, request: Request, db: Session = Depends(get_db)
 
     return {
         "id": inst.id, "name": inst.name, "status": inst.status,
+        "status_color": _status_color(inst.status),
         "transition_status": inst.transition_status,
         "yaml_raw": inst.yaml_raw,
+        "edges_json": inst.edges_json or [],
         "agent_ids": inst.agent_ids,
         "priority": inst.priority,
         "token_soft_limit": inst.token_soft_limit,
