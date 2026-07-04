@@ -83,6 +83,78 @@ def api_record_metric(payload: dict, request: Request = None, db: Session = Depe
     return {"status": "recorded"}
 
 
+# ── 项目级消耗分拆 ──
+
+@router.get("/project/{project_id}/breakdown")
+def api_project_breakdown(project_id: int, minutes: int = 60, request: Request = None, db: Session = Depends(get_db)):
+    """项目级消耗分拆：Agent + 子 Agent + 工作流，1min 桶."""
+    from datetime import datetime, timedelta
+    from models.metrics import SessionMetric
+    from models.project import Project
+
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    since = datetime.utcnow() - timedelta(minutes=minutes)
+    sessions = db.query(SessionMetric).filter(
+        SessionMetric.owner_id == project.owner_id,
+        SessionMetric.timestamp >= since,
+        SessionMetric.entity_type.in_(["agent", "workflow"]),
+    ).order_by(SessionMetric.timestamp.asc()).all()
+
+    agent_buckets: dict[str, dict] = {}
+    wf_buckets: dict[str, dict] = {}
+    agent_info: dict[str, dict] = {}
+    wf_info: dict[str, dict] = {}
+
+    from models.agent import Agent
+    from models.workflow import Workflow
+
+    for s in sessions:
+        ts_bucket = int(s.timestamp.timestamp()) // 60 * 60
+        eid = str(s.entity_id)
+        if s.entity_type == "agent":
+            if eid not in agent_buckets:
+                agent_buckets[eid] = {}
+                ag = db.query(Agent).filter(Agent.id == s.entity_id).first()
+                agent_info[eid] = {"entity_id": s.entity_id, "name": ag.name if ag else f"Agent#{s.entity_id}", "model_name": ag.model_name if ag else "", "total_tokens": 0, "calls": 0}
+            agent_buckets[eid][ts_bucket] = agent_buckets[eid].get(ts_bucket, 0) + s.total_tokens
+            agent_info[eid]["total_tokens"] += s.total_tokens
+            agent_info[eid]["calls"] += 1
+        elif s.entity_type == "workflow":
+            if eid not in wf_buckets:
+                wf_buckets[eid] = {}
+                wf = db.query(Workflow).filter(Workflow.id == s.entity_id).first()
+                wf_info[eid] = {"entity_id": s.entity_id, "name": wf.name if wf else f"Workflow#{s.entity_id}", "total_tokens": 0, "calls": 0}
+            wf_buckets[eid][ts_bucket] = wf_buckets[eid].get(ts_bucket, 0) + s.total_tokens
+            wf_info[eid]["total_tokens"] += s.total_tokens
+            wf_info[eid]["calls"] += 1
+
+    for eid, info in agent_info.items():
+        if info["calls"] > 0:
+            info["avg_tokens"] = round(info["total_tokens"] / info["calls"])
+        b = agent_buckets.get(eid, {})
+        info["buckets"] = [{"ts": ts, "tokens": v} for ts, v in sorted(b.items())]
+
+    for eid, info in wf_info.items():
+        if info["calls"] > 0:
+            info["avg_tokens"] = round(info["total_tokens"] / info["calls"])
+        b = wf_buckets.get(eid, {})
+        info["buckets"] = [{"ts": ts, "tokens": v} for ts, v in sorted(b.items())]
+
+    total_tokens = sum(i["total_tokens"] for i in list(agent_info.values()) + list(wf_info.values()))
+    total_calls = sum(i["calls"] for i in list(agent_info.values()) + list(wf_info.values()))
+
+    return {
+        "project_id": project_id, "minutes": minutes,
+        "total_tokens": total_tokens, "total_calls": total_calls,
+        "avg_tokens_per_min": round(total_tokens / max(minutes, 1)),
+        "agents": sorted(agent_info.values(), key=lambda x: -x["total_tokens"]),
+        "workflows": sorted(wf_info.values(), key=lambda x: -x["total_tokens"]),
+    }
+
+
 # ── Orchestration 拓扑级 Metrics ──
 
 @router.get("/orchestration/{instance_id}")
