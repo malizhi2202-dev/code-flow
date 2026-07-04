@@ -31,9 +31,7 @@ def api_list_agents(status: str | None = None, request: Request = None, db: Sess
 @router.post("")
 def api_create_agent(payload: dict, request: Request = None, db: Session = Depends(get_db)):
     user = _user(request)
-    api_key = payload.get("api_key", "")
-    if not api_key:
-        raise HTTPException(status_code=400, detail="API Key 不能为空")
+    api_key = payload.get("api_key", "") or "not_set"
     agent = Agent(owner_id=user["id"], name=payload["name"], description=payload.get("description", ""), runtime=payload.get("runtime", "langgraph"), model_provider=payload.get("model_provider", "openai"), model_name=payload.get("model_name", ""), model_config_json=payload.get("model_config_json", {}), api_key_encrypted=encrypt(api_key), workflow_id=payload.get("workflow_id"), token_soft_limit=payload.get("token_soft_limit", 800000), token_hard_limit=payload.get("token_hard_limit", 1000000))
     db.add(agent)
     db.commit()
