@@ -5,17 +5,30 @@ import type { Node, Edge } from '@xyflow/react';
 // Types
 // ═══════════════════════════════════════════
 
+// ── 15 种连线模式（v1 实现 13 种，v2 补 sub-orch / dynamic-router）──
 export type EdgeType =
-  | 'sequential'
-  | 'parallel'
-  | 'fork'
-  | 'master-slave'
-  | 'event-trigger'
-  | 'retry-fallback';
+  // 顺序型
+  | 'sequential' | 'pipeline'
+  // 并发型
+  | 'parallel' | 'fan-out'
+  // 聚合型
+  | 'fan-in' | 'map-reduce'
+  // 路由型
+  | 'fork' | 'condition'  // v2: 'dynamic-router'
+  // 层级型
+  | 'master-slave'  // v2: 'sub-orch'
+  // 事件/人工型
+  | 'event-trigger' | 'human-approval'
+  // 容错/归档型
+  | 'retry-fallback' | 'dead-letter';
 
-export type TriggerType = 'auto' | 'event' | 'schedule' | 'manual';
+export type TriggerType = 'auto' | 'event' | 'schedule' | 'manual' | 'human';
 export type BackoffType = 'fixed' | 'exponential';
 export type IoFilterType = 'none' | 'mask_pii' | 'schema_only';
+export type WaitStrategy = 'wait_all' | 'wait_any' | 'wait_first' | 'wait_n' | 'no_wait';
+export type MergeStrategy = 'merge_all' | 'merge_first' | 'merge_concat' | 'merge_pick' | 'no_merge';
+export type DataScope = 'all' | 'subset' | 'masked';
+export type TimeoutAction = 'degrade' | 'skip' | 'fail' | 'retry';
 
 export interface RetryPolicy {
   max_retries: number;
@@ -27,35 +40,62 @@ export interface EdgeConfig {
   id: string;
   source: string;
   target: string;
+  // 路由
   type: EdgeType;
-  trigger_condition: string;
+  description: string;
+  // 触发
   trigger_type: TriggerType;
+  trigger_condition: string;
+  // 数据
+  data_scope: DataScope;
+  subset_fields: string[];
+  transform_expr: string;
+  // IO Schema
   input_schema: Record<string, unknown>;
   output_schema: Record<string, unknown>;
+  // 等待与合并
+  wait_strategy: WaitStrategy;
+  wait_n_count: number;
+  merge_strategy: MergeStrategy;
+  timeout_seconds: number;
+  timeout_action: TimeoutAction;
+  // 安全
   gate_pre: string;
   gate_post: string;
+  io_filter: IoFilterType;
+  // 资源
   token_soft_limit: number;
   token_hard_limit: number;
-  description: string;
+  // 容错
   retry_policy: RetryPolicy;
-  io_filter: IoFilterType;
+  // 循环防护
+  max_invocations: number;
 }
 
 export function defaultEdgeConfig(id: string, source: string, target: string): EdgeConfig {
   return {
     id, source, target,
     type: 'sequential',
-    trigger_condition: '',
+    description: '',
     trigger_type: 'auto',
+    trigger_condition: '',
+    data_scope: 'all',
+    subset_fields: [],
+    transform_expr: '',
     input_schema: { type: 'object', properties: {} },
     output_schema: { type: 'object', properties: {} },
+    wait_strategy: 'wait_all',
+    wait_n_count: 1,
+    merge_strategy: 'merge_all',
+    timeout_seconds: 60,
+    timeout_action: 'degrade',
     gate_pre: 'noop',
     gate_post: 'noop',
+    io_filter: 'none',
     token_soft_limit: 80000,
     token_hard_limit: 100000,
-    description: '',
     retry_policy: { max_retries: 3, backoff: 'exponential', fallback_node: null },
-    io_filter: 'none',
+    max_invocations: 1,
   };
 }
 

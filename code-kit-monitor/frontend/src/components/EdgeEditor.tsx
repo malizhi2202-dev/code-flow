@@ -1,7 +1,7 @@
 /** 连线配置侧面板 — 创建/编辑连线时从右侧滑入. */
 import { useState, useEffect } from 'react';
 import { Trash2, X } from 'lucide-react';
-import type { EdgeConfig, EdgeType, TriggerType, IoFilterType } from '../lib/orchestration-sync';
+import type { EdgeConfig, EdgeType, TriggerType, IoFilterType, WaitStrategy, MergeStrategy, DataScope, TimeoutAction } from '../lib/orchestration-sync';
 import { defaultEdgeConfig } from '../lib/orchestration-sync';
 
 interface Props {
@@ -15,13 +15,20 @@ interface Props {
   agentNames: string[];
 }
 
-const EDGE_TYPES: { value: EdgeType; label: string; desc: string }[] = [
-  { value: 'sequential', label: '顺序 (sequential)', desc: 'A 完成 → B 开始' },
-  { value: 'parallel', label: '并发 (parallel)', desc: 'A 和 B 同时启动' },
-  { value: 'fork', label: '分叉 (fork)', desc: '按条件分支到 B 或 C' },
-  { value: 'master-slave', label: '主从 (master-slave)', desc: 'Master 调度多个 Slave' },
-  { value: 'event-trigger', label: '时机触发 (event-trigger)', desc: '等待外部事件再启动' },
-  { value: 'retry-fallback', label: '重试降级 (retry-fallback)', desc: '失败重试 N 次后降级' },
+const EDGE_TYPES: { value: EdgeType; label: string; desc: string; v2?: boolean }[] = [
+  { value: 'sequential', label: '🟦 顺序 (sequential)', desc: 'A 完成 → B 开始' },
+  { value: 'pipeline', label: '🟦 流水线 (pipeline)', desc: 'A 流式输出 → B 逐步接收' },
+  { value: 'parallel', label: '🟩 并发 (parallel)', desc: 'A 和 B 同时启动，互不等待' },
+  { value: 'fan-out', label: '🟩 扇出 (fan-out)', desc: 'A 广播给 B、C、D' },
+  { value: 'fan-in', label: '🟨 扇入 (fan-in)', desc: 'B、C、D 汇总给 E' },
+  { value: 'map-reduce', label: '🟨 映射归约 (map-reduce)', desc: 'A 拆分→N×B→C 归约' },
+  { value: 'fork', label: '🟧 分叉 (fork)', desc: '条件二分叉' },
+  { value: 'condition', label: '🟧 多分支 (condition)', desc: '按表达式选 B1/B2/B3...' },
+  { value: 'master-slave', label: '🟪 主从 (master-slave)', desc: 'Master 调度 N 个 Slave' },
+  { value: 'event-trigger', label: '🟥 事件触发 (event-trigger)', desc: '等待外部事件再启动' },
+  { value: 'human-approval', label: '🟥 人工确认 (human-approval)', desc: '暂停等人工审批后继续' },
+  { value: 'retry-fallback', label: '🟦 重试降级 (retry-fallback)', desc: '失败→重试 N 次→降级' },
+  { value: 'dead-letter', label: '⬜ 死信 (dead-letter)', desc: '最终失败→归档到死信队列' },
 ];
 
 const TRIGGER_TYPES: { value: TriggerType; label: string }[] = [
@@ -29,6 +36,7 @@ const TRIGGER_TYPES: { value: TriggerType; label: string }[] = [
   { value: 'event', label: '事件 (等待外部事件)' },
   { value: 'schedule', label: '定时 (cron)' },
   { value: 'manual', label: '人工确认' },
+  { value: 'human', label: '人工审批' },
 ];
 
 const GATE_RULES = ['noop', 'validate_sql_injection', 'mask_pii', 'validate_output_schema', 'check_param_type'];
@@ -176,6 +184,85 @@ export default function EdgeEditor({ edgeId, source, target, config: initialConf
             <option value="">无</option>
             {agentNames.filter((n) => n !== source).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
+        </div>
+      </div>
+
+      {/* Wait & Merge */}
+      <div style={section}>
+        <div style={sectionHdr}>等待与合并</div>
+        <div style={{ marginBottom: 6 }}>
+          <div style={lbl}>等待策略</div>
+          <select value={config.wait_strategy} onChange={(e) => update({ wait_strategy: e.target.value as WaitStrategy })} style={sel}>
+            <option value="wait_all">wait_all — 等全部完成</option>
+            <option value="wait_any">wait_any — 任一完成即继续</option>
+            <option value="wait_first">wait_first — 最快的那个</option>
+            <option value="wait_n">wait_n — 等 N 个完成</option>
+            <option value="no_wait">no_wait — 不等待 (fire-and-forget)</option>
+          </select>
+        </div>
+        {config.wait_strategy === 'wait_n' && (
+          <div style={{ marginBottom: 6 }}>
+            <div style={lbl}>等待数量 (N)</div>
+            <input type="number" value={config.wait_n_count} onChange={(e) => update({ wait_n_count: parseInt(e.target.value) || 1 })} style={inp} min={1} />
+          </div>
+        )}
+        <div style={{ marginBottom: 6 }}>
+          <div style={lbl}>合并策略（多入边节点）</div>
+          <select value={config.merge_strategy} onChange={(e) => update({ merge_strategy: e.target.value as MergeStrategy })} style={sel}>
+            <option value="merge_all">merge_all — 合并为 dict</option>
+            <option value="merge_first">merge_first — 用最先到的</option>
+            <option value="merge_concat">merge_concat — 拼接为数组</option>
+            <option value="merge_pick">merge_pick — 指定字段合并</option>
+            <option value="no_merge">no_merge — 每份独立触发</option>
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <div style={lbl}>超时 (秒)</div>
+            <input type="number" value={config.timeout_seconds} onChange={(e) => update({ timeout_seconds: parseInt(e.target.value) || 60 })} style={inp} min={0} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={lbl}>超时动作</div>
+            <select value={config.timeout_action} onChange={(e) => update({ timeout_action: e.target.value as TimeoutAction })} style={sel}>
+              <option value="degrade">降级</option>
+              <option value="skip">跳过</option>
+              <option value="fail">失败</option>
+              <option value="retry">重试</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Data Scope */}
+      <div style={section}>
+        <div style={sectionHdr}>数据范围</div>
+        <div style={{ marginBottom: 6 }}>
+          <div style={lbl}>数据传递</div>
+          <select value={config.data_scope} onChange={(e) => update({ data_scope: e.target.value as DataScope })} style={sel}>
+            <option value="all">all — 全部数据</option>
+            <option value="subset">subset — 指定字段</option>
+            <option value="masked">masked — 脱敏后传递</option>
+          </select>
+        </div>
+        {config.data_scope === 'subset' && (
+          <div style={{ marginBottom: 6 }}>
+            <div style={lbl}>传递字段 (逗号分隔)</div>
+            <input value={config.subset_fields.join(', ')} onChange={(e) => update({ subset_fields: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} placeholder="output.score, output.comments" style={inp} />
+          </div>
+        )}
+        <div>
+          <div style={lbl}>数据转换 (JSON path)</div>
+          <input value={config.transform_expr} onChange={(e) => update({ transform_expr: e.target.value })} placeholder="$.reviewer.output.score" style={inp} />
+        </div>
+      </div>
+
+      {/* Loop Protection */}
+      <div style={section}>
+        <div style={sectionHdr}>循环防护</div>
+        <div>
+          <div style={lbl}>最大调用次数 (防无限循环)</div>
+          <input type="number" value={config.max_invocations} onChange={(e) => update({ max_invocations: parseInt(e.target.value) || 1 })} style={inp} min={1} />
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>默认 1 = 不循环。设 {'>'}1 允许回到上游节点</div>
         </div>
       </div>
 
