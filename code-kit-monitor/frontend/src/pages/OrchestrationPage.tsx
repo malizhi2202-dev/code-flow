@@ -256,6 +256,12 @@ export default function OrchestrationPage() {
 
         {/* Canvas — 占满剩余宽度 */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          {topologyState.nodes.length === 0 && (
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 10, color: 'var(--text-muted)', textAlign: 'center' }}>
+              <p style={{ fontSize: 14 }}>⏳ 正在加载编排拓扑...</p>
+              <p style={{ fontSize: 10 }}>如果持续显示，请检查 YAML 中是否有 agents 定义</p>
+            </div>
+          )}
           <OrchestrationCanvas
             nodes={topologyState.nodes}
             edges={topologyState.edges}
