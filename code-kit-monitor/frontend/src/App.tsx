@@ -23,7 +23,6 @@ import AgentDetail from './pages/AgentDetail';
 import OrchestrationPage from './pages/OrchestrationPage';
 import OrchestrationListPage from './pages/OrchestrationListPage';
 import OrchDocPage from './pages/OrchDocPage';
-import OrchMonitorPage from './pages/OrchMonitorPage';
 import TemplateMarket from './pages/TemplateMarket';
 import MonitoringDashboard from './pages/MonitoringDashboard';
 import ConversationCenter from './pages/ConversationCenter';
@@ -217,11 +216,6 @@ export default function App() {
         }
         if (path.match(/\/orchestration\/\d+\/(md|yaml)/)) {
           return <OrchDocPage />;
-        }
-        if (path.match(/\/orchestration\/\d+\/monitor/)) {
-          const m = path.match(/\/orchestration\/(\d+)\/monitor/);
-          const monitorId = m ? parseInt(m[1]) : 0;
-          return <OrchMonitorPage orchId={monitorId} onBack={() => { window.history.back(); }} />;
         }
         return <OrchestrationListPage />;
       }
