@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   Node, Edge,
-  MarkerType, Handle, Position, Connection, useReactFlow,
+  MarkerType, Handle, Position, Connection,
   applyNodeChanges, applyEdgeChanges,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -104,9 +104,7 @@ function CanvasInner({
   nodes: initialNodes, edges: initialEdges, onNodesChange, onEdgesChange,
   onConnect, onNodeClick, onEdgeClick, onNodeDetailClick, onDrop, readOnly,
 }: Props) {
-  const { fitView } = useReactFlow();
-
-  // 直接使用 props 作为受控组件，不用 useNodesState
+  // 直接使用 props 作为受控组件
   const nodes = useMemo(() =>
     initialNodes.map((n: any) => ({
       ...n,
@@ -125,13 +123,6 @@ function CanvasInner({
     })),
     [initialEdges]
   );
-
-  useEffect(() => {
-    if (nodes.length > 0) {
-      const t = setTimeout(() => fitView({ padding: 0.2, maxZoom: 1.5, duration: 200 }), 500);
-      return () => clearTimeout(t);
-    }
-  }, [nodes.length, fitView]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, []);
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -156,8 +147,7 @@ function CanvasInner({
         onEdgeClick={(_, edge) => onEdgeClick?.(edge.id)}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: 1.5 }}
+        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
         elementsSelectable={!readOnly}

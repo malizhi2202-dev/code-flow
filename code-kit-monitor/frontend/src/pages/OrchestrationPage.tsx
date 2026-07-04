@@ -106,64 +106,38 @@ export default function OrchestrationPage() {
     setShowYaml(!showYaml);
   };
 
-  // Canvas handlers
+  // Canvas handlers — 仅本地更新状态，不自动回写YAML（避免死循环）
   const handleNodesChange = useCallback((nodes: any[]) => {
-    if (yamlDirtyRef.current) return;
-    canvasDirtyRef.current = true;
-    setTopologyState({ ...topologyState, nodes });
-    clearTimeout(debounceRef.current!);
-    debounceRef.current = setTimeout(() => {
-      const yaml = topologyToYaml(nodes, topologyState.edges, edgeConfigs, orchName);
-      setYamlContent(yaml);
-      canvasDirtyRef.current = false;
-    }, 300);
-  }, [topologyState, edgeConfigs, orchName]);
-
+    setTopologyState((prev: any) => ({ ...prev, nodes }));
+  }, []);
   const handleEdgesChange = useCallback((edges: any[]) => {
-    if (yamlDirtyRef.current) return;
-    canvasDirtyRef.current = true;
-    setTopologyState({ ...topologyState, edges });
-    clearTimeout(debounceRef.current!);
-    debounceRef.current = setTimeout(() => {
-      const yaml = topologyToYaml(topologyState.nodes, edges, edgeConfigs, orchName);
-      setYamlContent(yaml);
-      canvasDirtyRef.current = false;
-    }, 300);
-  }, [topologyState, edgeConfigs, orchName]);
+    setTopologyState((prev: any) => ({ ...prev, edges }));
+  }, []);
+
+  // 手动同步：画布 → YAML
+  const syncToYaml = () => {
+    const yaml = topologyToYaml(topologyState.nodes, topologyState.edges, edgeConfigs, orchName);
+    setYamlContent(yaml);
+  };
 
   const handleConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
     const edgeId = `edge-${Date.now()}`;
-    const sourceNode = topologyState.nodes.find((n) => n.id === connection.source);
-    const targetNode = topologyState.nodes.find((n) => n.id === connection.target);
+    const sourceNode = topologyState.nodes.find((n: any) => n.id === connection.source);
+    const targetNode = topologyState.nodes.find((n: any) => n.id === connection.target);
     const sourceName = sourceNode?.data?.label || connection.source;
     const targetName = targetNode?.data?.label || connection.target;
 
-    // Create edge
     const newEdge = {
       id: edgeId, source: connection.source, target: connection.target,
       type: 'sequential', label: '顺序',
       markerEnd: { type: 'arrowclosed' as const, width: 14, height: 14, color: 'rgba(84,140,240,0.5)' },
       style: { stroke: 'rgba(255,255,255,0.15)', strokeWidth: 1.5 },
     };
-    const newEdges = [...topologyState.edges, newEdge];
-    setTopologyState({ ...topologyState, edges: newEdges });
-
-    // Create default edge config
+    setTopologyState((prev: any) => ({ ...prev, edges: [...prev.edges, newEdge] }));
     setEdgeConfig(edgeId, defaultEdgeConfig(edgeId, sourceName, targetName));
-
-    // Open editor
     setSelectedEdge(edgeId);
-
-    // Trigger YAML sync
-    canvasDirtyRef.current = true;
-    clearTimeout(debounceRef.current!);
-    debounceRef.current = setTimeout(() => {
-      const yaml = topologyToYaml(topologyState.nodes, newEdges, edgeConfigs, orchName);
-      setYamlContent(yaml);
-      canvasDirtyRef.current = false;
-    }, 300);
-  }, [topologyState, edgeConfigs, orchName]);
+  }, [topologyState.nodes]);
 
   const handleEdgeClick = useCallback((edgeId: string) => {
     setSelectedEdge(edgeId);
@@ -237,6 +211,9 @@ export default function OrchestrationPage() {
           placeholder="编排名称"
         />
         <div style={{ flex: 1 }} />
+        <button onClick={syncToYaml} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11 }} title="画布改动同步到YAML">
+          <Save size={12} /> 同步
+        </button>
         <button onClick={() => setShowYaml(!showYaml)} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', background: showYaml ? 'var(--blue-bg)' : 'var(--bg-card)', border: `1px solid ${showYaml ? 'var(--blue)' : 'var(--border)'}`, borderRadius: 'var(--r-sm)', color: showYaml ? 'var(--blue)' : 'var(--text-secondary)', cursor: 'pointer', fontSize: 11 }}>
           <FileCode size={12} /> YAML
         </button>
