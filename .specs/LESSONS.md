@@ -86,8 +86,30 @@
 **解决**: `safe_load` 后加 `isinstance(doc, dict)` 检查，非 dict 返回结构化错误。
 **教训**: YAML 解析后必须校验返回值类型。
 
----
-
 **改进方向**: 抽象 `createEntityStore<T>(endpoint, uid)` 工厂函数，减少重复代码 ~80%。
 
 ---
+
+## L-007 · knip + depcheck 双重验证避免误报
+
+- **标签**: #tooling #cleanup #maintenance
+- **关键词**: knip, depcheck, unused, dead-code
+- **适用栈**: TypeScript + React
+- **状态**: active
+- **来源**: `M-health 2026-07-04`
+
+**观察**: knip 和 depcheck 对未用依赖的检测结果高度一致（5/5 匹配），可任选其一作为清理依据。但 knip 在未用文件/导出的检测上更精确（区分 export/export type）。
+**建议**: 周期性健康检查时跑 knip（覆盖面更广），清理前用 depcheck 做二次确认。
+
+---
+
+## L-008 · vulture 在 FastAPI 项目上高误报
+
+- **标签**: #tooling #python #false-positive
+- **关键词**: vulture, FastAPI, dead-code, include_router
+- **适用栈**: Python + FastAPI
+- **状态**: observe
+- **来源**: `M-health 2026-07-04`
+
+**观察**: vulture 在 FastAPI 项目上检出 ~40 条"未用"函数，但绝大多数是通过 `app.include_router()` 动态注册的 API 路由（vulture 无法追踪 FastAPI 的路由注册机制）。
+**建议**: 对于 FastAPI 项目，只关注 vulture 结果中**非路由文件**（models/services/engine/config）的条目，路由文件（routes/）的命中基本可忽略。
