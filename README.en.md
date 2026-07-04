@@ -2,9 +2,7 @@
 
 > **Full-stack AI Development Platform** — Agent Orchestration + Visual Monitoring from Requirements to Archive
 
-<p align="center">
-  <img src="./demo.mp4" alt="Demo" width="800" />
-</p>
+![demo](./demo.gif)
 
 > 📖 [中文版 / Chinese Version](./README.md)
 
