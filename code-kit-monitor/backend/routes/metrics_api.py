@@ -1,6 +1,7 @@
 """监控 API 路由 — 实体级 + 全局汇总."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database import get_db
 from services.metrics_service import get_metrics, get_global_metrics, record_metric
 
