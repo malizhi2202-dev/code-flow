@@ -6,8 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from database import get_db
 from models.channel_config import ChannelConfig, CHANNEL_TYPES, CHANNEL_STATUSES
+import os
+import time
+import threading
 from services.encryption_service import encrypt, decrypt
 from services.chat_service import chat_service
+from services.audit_service import log_audit
 from services.audit_service import log_audit
 
 router = APIRouter(tags=["channels"])
@@ -239,3 +243,181 @@ def test_channel(agent_id: int, channel_id: int, request: Request, db: Session =
         cfg.updated_at = datetime.datetime.utcnow()
         db.commit()
         return {"ok": False, "detail": str(e)[:200]}
+
+
+# ═══════════════════════════════════════════
+# OAuth 扫码接入
+# ═══════════════════════════════════════════
+
+# 内存 OAuth state 存储 {device_code: {status, credentials?, created_at, channel_type, owner_id, agent_id}}
+_oauth_states: dict = {}
+_oauth_lock = threading.Lock()
+# Rate limiting: {device_code: last_poll_timestamp}
+_oauth_rate_limit: dict = {}
+
+
+def _cleanup_expired_states():
+    """清理过期的 OAuth state（超过 10 分钟的条目）."""
+    now = time.time()
+    with _oauth_lock:
+        expired = [k for k, v in _oauth_states.items() if now - v.get("created_at", 0) > 600]
+        for k in expired:
+            del _oauth_states[k]
+            _oauth_rate_limit.pop(k, None)
+
+
+def _get_oauth_provider(channel_type: str):
+    """根据渠道类型获取 OAuthProvider 实例."""
+    mock_mode = os.getenv("CHANNEL_OAUTH_MOCK", "").lower() in ("1", "true", "yes")
+    if mock_mode:
+        from services.oauth_mock import MockOAuthProvider
+        return MockOAuthProvider()
+
+    if channel_type == "feishu":
+        from services.oauth_feishu import FeishuOAuth
+        return FeishuOAuth()
+    elif channel_type == "dingtalk":
+        from services.oauth_dingtalk import DingTalkOAuth
+        return DingTalkOAuth()
+    else:
+        raise HTTPException(status_code=400, detail=f"扫码接入不支持渠道类型: {channel_type}，仅支持 feishu/dingtalk")
+
+
+@router.post("/api/channels/{channel_type}/oauth/start")
+def oauth_start(channel_type: str, payload: dict = {}, request: Request = None):
+    """发起 OAuth 扫码接入 — 返回二维码 URL.
+
+    body 可选: { agent_id: int }
+    """
+    if channel_type not in ("feishu", "dingtalk"):
+        raise HTTPException(status_code=400, detail=f"扫码接入不支持渠道类型: {channel_type}")
+
+    _cleanup_expired_states()
+
+    try:
+        provider = _get_oauth_provider(channel_type)
+        app_config = payload.get("app_config")
+        result = provider.start_oauth(app_config=app_config)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OAuth 启动失败: {str(e)}")
+
+    # 存储 OAuth state
+    owner_id = _uid(request)
+    with _oauth_lock:
+        _oauth_states[result.device_code] = {
+            "status": "pending",
+            "created_at": time.time(),
+            "channel_type": channel_type,
+            "owner_id": owner_id,
+            "agent_id": payload.get("agent_id"),
+            "provider": type(provider).__name__,
+        }
+
+    log_audit(
+        owner_id, owner_id, "oauth_start", channel_type,
+        "agent", f"device_code={result.device_code[:16]}...",
+        request.client.host if request.client else "127.0.0.1",
+    )
+
+    return {
+        "ok": True,
+        "qr_url": result.qr_url,
+        "device_code": result.device_code,
+        "expires_in": result.expires_in,
+    }
+
+
+@router.get("/api/channels/{channel_type}/oauth/poll")
+def oauth_poll(channel_type: str, device_code: str, request: Request = None, db: Session = Depends(get_db)):
+    """轮询 OAuth 授权状态.
+
+    授权成功后自动创建 channel_config 记录并标记 active。
+    """
+    if channel_type not in ("feishu", "dingtalk"):
+        raise HTTPException(status_code=400, detail=f"不支持渠道类型: {channel_type}")
+
+    # Rate limiting: 同一 device_code 至少间隔 1 秒
+    now = time.time()
+    last = _oauth_rate_limit.get(device_code, 0)
+    if now - last < 1.0:
+        raise HTTPException(status_code=429, detail="轮询过于频繁，请 1 秒后重试")
+    _oauth_rate_limit[device_code] = now
+
+    with _oauth_lock:
+        state = _oauth_states.get(device_code)
+        if not state:
+            raise HTTPException(status_code=404, detail="device_code 不存在或已过期，请重新发起扫码")
+
+    # 检查是否过期（5 分钟）
+    if now - state["created_at"] > 300:
+        with _oauth_lock:
+            _oauth_states[device_code]["status"] = "expired"
+        log_audit(
+            state["owner_id"], state["owner_id"], "oauth_expired", channel_type,
+            "agent", f"device_code={device_code[:16]}...",
+            request.client.host if request.client else "127.0.0.1",
+        )
+        return {"ok": True, "status": "expired"}
+
+    # 如果路由层已标记为最终状态（Mock 模式直接写入）
+    if state["status"] in ("authorized", "rejected", "expired", "error"):
+        return {"ok": True, "status": state["status"], "error_detail": state.get("error_detail")}
+
+    # 调真实平台轮询
+    try:
+        provider = _get_oauth_provider(channel_type)
+        result = provider.poll_oauth(device_code)
+    except Exception as e:
+        with _oauth_lock:
+            _oauth_states[device_code]["status"] = "error"
+            _oauth_states[device_code]["error_detail"] = str(e)
+        return {"ok": True, "status": "error", "error_detail": str(e)[:200]}
+
+    # 更新内存状态
+    with _oauth_lock:
+        _oauth_states[device_code]["status"] = result.status
+        if result.error_detail:
+            _oauth_states[device_code]["error_detail"] = result.error_detail
+
+    # 授权成功 → 自动创建渠道配置
+    if result.status == "authorized":
+        owner_id = state["owner_id"]
+        agent_id = state.get("agent_id")
+
+        credentials = result.credentials or {}
+        cfg = ChannelConfig(
+            agent_id=agent_id or 0,
+            owner_id=owner_id,
+            channel_type=channel_type,
+            credentials_encrypted=encrypt(json.dumps(credentials, ensure_ascii=False)),
+            status="active",
+            webhook_uuid=uuid.uuid4().hex,
+        )
+        db.add(cfg)
+        db.commit()
+        db.refresh(cfg)
+
+        log_audit(
+            owner_id, owner_id, "oauth_authorized", channel_type,
+            "agent", f"channel_id={cfg.id}",
+            request.client.host if request.client else "127.0.0.1",
+        )
+
+        return {"ok": True, "status": "authorized", "channel": cfg.to_dict()}
+
+    if result.status == "rejected":
+        log_audit(
+            state["owner_id"], state["owner_id"], "oauth_rejected", channel_type,
+            "agent", f"device_code={device_code[:16]}...",
+            request.client.host if request.client else "127.0.0.1",
+        )
+
+    if result.status == "error":
+        log_audit(
+            state["owner_id"], state["owner_id"], "oauth_error", channel_type,
+            "agent", f"device_code={device_code[:16]}... detail={result.error_detail}",
+            request.client.host if request.client else "127.0.0.1",
+            "error",
+        )
+
+    return {"ok": True, "status": result.status, "error_detail": result.error_detail}
