@@ -40,6 +40,23 @@ def api_create_custom_role(payload: dict, request: Request = None, db: Session =
     return role.to_dict()
 
 
+@router.put("/custom/{role_id}")
+def api_update_custom_role(role_id: int, payload: dict, request: Request = None, db: Session = Depends(get_db)):
+    user = request.state.user if request else None
+    q = db.query(CustomRole).filter(CustomRole.id == role_id)
+    if user and user.get("role") != "admin":
+        q = q.filter(CustomRole.owner_id == user["id"])
+    role = q.first()
+    if not role:
+        raise HTTPException(status_code=404, detail="角色不存在")
+    for f in ("name", "based_on", "temperament", "responsibilities", "triggers", "boundaries_can", "boundaries_cannot", "evaluation", "inputs", "outputs", "gate_pre_check", "gate_post_check", "io_filter"):
+        if f in payload:
+            setattr(role, f, payload[f])
+    db.commit()
+    db.refresh(role)
+    return role.to_dict()
+
+
 @router.delete("/custom/{role_id}")
 def api_delete_custom_role(role_id: int, request: Request = None, db: Session = Depends(get_db)):
     user = request.state.user if request else None

@@ -29,6 +29,8 @@ Wave 15 (parallel): T44[P], T45[P] (depends on T42,T43)
 --- v1.3 登录登出 + 用户中心 ---
 Wave 16 (parallel): T46[P], T47[P] (depends on T42,T43)
 Wave 17:           T48 (depends on T46,T47)
+--- v1.4 第三阶段 详情页 + 安全闸门 ---
+Wave 18 (parallel): T49[P], T50[P], T51[P], T52[P], T53[P], T54[P]
 ```
 
 ---
@@ -997,7 +999,7 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
   <auto>true</auto>
 </task>
 
-<task id="T43" parallel="true" status="pending">
+<task id="T43" parallel="true" status="done">
   <name>侧边栏用户区域重构：登出按钮 + 用户中心入口（去掉切换用户）</name>
   <read_files>
     frontend/src/components/UserSelect.tsx
@@ -1025,7 +1027,7 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
   <auto>true</auto>
 </task>
 
-<task id="T44" parallel="true" status="pending">
+<task id="T44" parallel="true" status="done">
   <name>UserManagement 完整权限管理面板</name>
   <read_files>
     frontend/src/pages/UserManagement.tsx
@@ -1050,7 +1052,7 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
   <auto>true</auto>
 </task>
 
-<task id="T45" parallel="false" status="pending">
+<task id="T45" parallel="false" status="done">
   <name>端到端修复验证 + 双向入口</name>
   <read_files>
     frontend/src/App.tsx
@@ -1084,7 +1086,7 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
 
 --- v1.3 登录登出 + 用户中心 ---
 
-<task id="T46" parallel="true" status="pending">
+<task id="T46" parallel="true" status="done">
   <name>前端 UserCenter 用户中心页</name>
   <read_files>
     frontend/src/pages/UserManagement.tsx
@@ -1109,7 +1111,7 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
   <auto>true</auto>
 </task>
 
-<task id="T47" parallel="true" status="pending">
+<task id="T47" parallel="true" status="done">
   <name>App.tsx 路由集成：登录/登出/用户中心</name>
   <read_files>
     frontend/src/App.tsx
@@ -1135,7 +1137,7 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
   <auto>true</auto>
 </task>
 
-<task id="T48" parallel="false" status="pending">
+<task id="T48" parallel="false" status="done">
   <name>v1.3 端到端验证：登录/登出/用户中心</name>
   <read_files>
     frontend/src/App.tsx
@@ -1159,6 +1161,160 @@ print(f'backup dir exists: {os.path.isdir(backup_dir)} or will be created')
   <done>v1.3 全流程闭环：密码登录/登出/用户中心完整可用，无切换用户功能</done>
   <depends_on>T47</depends_on>
   <auto>false</auto>
+<!-- ═══════════════════════════════════════════ -->
+<!-- v1.4 第三阶段：详情页 + 安全闸门（6 task, 1 wave）-->
+<!-- ═══════════════════════════════════════════ -->
+
+<task id="T49" parallel="true" status="done">
+  <name>工作流详情页：节点编辑/增删/排序/绑定 + Token 监控看板</name>
+  <read_files>
+    frontend/src/pages/WorkflowList.tsx
+    REQUIREMENT.md##工作流
+  </read_files>
+  <write_files>
+    frontend/src/pages/WorkflowDetail.tsx
+  </write_files>
+  <action>
+    创建工作流详情页（从 WorkflowList 点击进入）：
+    - Tab 切换：🔀 节点编辑 / 👥 角色绑定 / 📊 监控
+    - 节点编辑：展示所有节点列表，支持编辑节点名称+绑定工具、上移/下移调整顺序、删除节点、添加新节点
+    - 连线编辑：支持添加/删除节点之间的连线（from → to），连线类型 sequential/parallel/fork
+    - 节点详情：点击节点进入子详情页，编辑 label/tool_id/gate_pre/gate_post/io_filter/token_limit
+    - Token 监控看板：展示该工作流的 token 消耗柱状图/折线图/饼图（5 分钟粒度）、工具命中次数、执行时间
+    - 保存后自动同步到后端
+  </action>
+  <verify>前端验证：工作流列表→点击进入详情→切换 tab→编辑节点名称→上下移动→删除→添加→保存→刷新确认持久化</verify>
+  <done>工作流详情页完整可用：节点 CRUD + 排序 + 连线 + 节点详情 + token 监控看板</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T50" parallel="true" status="done">
+  <name>工作流创建页：文字描述/可视化双模式</name>
+  <read_files>
+    REQUIREMENT.md##工作流
+  </read_files>
+  <write_files>
+    frontend/src/pages/WorkflowCreate.tsx
+  </write_files>
+  <action>
+    创建工作流创建页：
+    - 双模式：文字描述（Markdown 编辑）+ 可视化（Dify 式节点连线）
+    - 表单字段：名称、描述、定义模式选择（md/visual）
+    - Demo 模板下载：提供 Markdown 模板文件供用户下载参考
+    - 创建时初始化空节点列表 + 空边列表
+    - 安全闸门、token 软硬限制、IO 过滤策略字段（不填用默认值）
+    - 创建成功后跳转工作流列表
+  </action>
+  <verify>前端验证：点击创建工作流→填写名称→选择可视化模式→创建→在工作流列表中可见</verify>
+  <done>工作流创建页双模式可用，demo 模板可下载，默认安全闸门/Token 限制</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T51" parallel="true" status="done">
+  <name>工具详情页：Markdown 编辑器 + 排版优化</name>
+  <read_files>
+    frontend/src/pages/ToolMarket.tsx
+    REQUIREMENT.md##工具
+  </read_files>
+  <write_files>
+    frontend/src/pages/ToolDetail.tsx
+  </write_files>
+  <action>
+    创建工具详情页（从 ToolMarket 点击工具进入）：
+    - 左右分栏布局：左侧 Markdown 编辑器（带行号），右侧实时预览
+    - 编辑区：全功能 Markdown 编辑（标题/列表/代码块/表格/链接）
+    - 保存按钮 + 已保存状态提示（绿色标签）
+    - 展示工具元信息：名称、类型（plugin/skill/mcp）、token 限制、权限清单
+    - 返回按钮回到工具库列表
+    - UI 风格：等宽字体编辑区，暗色背景，行号灰色
+  </action>
+  <verify>前端验证：工具库→点击工具→进入详情→编辑 Markdown→保存→刷新确认内容持久化</verify>
+  <done>工具详情页 Markdown 编辑器可用，左右分栏实时预览，保存持久化</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T52" parallel="true" status="done">
+  <name>角色详情页：完整要素编辑/删除 + 排版优化</name>
+  <read_files>
+    frontend/src/pages/RoleMarket.tsx
+    REQUIREMENT.md##角色
+  </read_files>
+  <write_files>
+    frontend/src/pages/RoleDetail.tsx
+  </write_files>
+  <action>
+    创建角色详情页（从 RoleMarket 点击进入，支持创建/编辑双模式）：
+    - 完整要素表单：名称、性情描述、职责边界、触发场景、输入格式、输出格式、约束规则
+    - 编辑区使用 textarea 大输入框（替换之前的小 input）
+    - Markdown 格式提示 + 预览切换
+    - 创建模式：「创建角色」标题 + 空表单
+    - 编辑模式：「编辑角色: <name>」标题 + 预填数据
+    - 删除按钮（红色，底部），带确认
+    - 保存按钮 + 返回按钮
+    - UI 排版：左侧编辑区 + 右侧预览区，字段分组折叠
+  </action>
+  <verify>前端验证：角色列表→点击角色→进入详情→编辑→保存→删除角色→确认删除→列表刷新</verify>
+  <done>角色详情页完整可用：创建/编辑/删除 + 大输入框 Markdown 编辑 + 分组排版</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T53" parallel="true" status="done">
+  <name>Agent 详情页：编辑/保存/删除</name>
+  <read_files>
+    frontend/src/pages/AgentBuilder.tsx
+    REQUIREMENT.md##Agent
+  </read_files>
+  <write_files>
+    frontend/src/pages/AgentDetail.tsx
+  </write_files>
+  <action>
+    创建 Agent 详情页（从 AgentBuilder 列表点击进入）：
+    - 展示 Agent 完整信息：名称、描述、运行时（langchain/langgraph）、模型配置（provider/model_name/api_key）
+    - 绑定工作流：显示绑定的工作流名称+ID，可切换
+    - Token 限制：软限制/硬限制输入
+    - 安全闸门：gate_pre/gate_post 配置
+    - 编辑模式：所有字段可修改
+    - 保存按钮（调用 PUT /api/agents/:id）
+    - 删除按钮（调用 DELETE /api/agents/:id），运行时不可删除
+    - 返回按钮回到 Agent 列表
+  </action>
+  <verify>前端验证：Agent 列表→点击 Agent→进入详情→修改配置→保存→删除→列表刷新</verify>
+  <done>Agent 详情页完整可用：查看/编辑/保存/删除，运行时删除被阻止</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
+<task id="T54" parallel="true" status="done">
+  <name>安全闸门内嵌：去掉独立安全页，闸门配置融入创建/编辑流程</name>
+  <read_files>
+    frontend/src/App.tsx
+    frontend/src/pages/AgentBuilder.tsx
+    frontend/src/pages/WorkflowDetail.tsx
+    frontend/src/pages/WorkflowCreate.tsx
+    REQUIREMENT.md##安全闸门
+  </read_files>
+  <write_files>
+    frontend/src/App.tsx
+  </write_files>
+  <action>
+    安全闸门重构：
+    - App.tsx：移除左边栏「安全」独立导航项
+    - AgentBuilder 创建 Agent 时内置 gate_pre/gate_post 字段（不填用默认值）
+    - WorkflowCreate 创建工作流时内置安全闸门字段
+    - WorkflowDetail 节点详情中可配置每个节点的 gate_pre/gate_post
+    - 默认策略：gate_pre=""（不校验）、gate_post=""（不校验）、io_filter="none"
+    - 各实体（工具/Agent/工作流）有各自的默认安全配置
+  </action>
+  <verify>前端验证：左边栏无「安全」入口→创建 Agent 时看到闸门字段→不填→创建成功使用默认值→工作流节点详情可配置闸门</verify>
+  <done>安全闸门已内嵌到各创建/编辑流程，左边栏无独立安全入口，默认值自动填充</done>
+  <depends_on></depends_on>
+  <auto>true</auto>
+</task>
+
 </task>
 ```
 

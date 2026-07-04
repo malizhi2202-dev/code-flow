@@ -12,12 +12,15 @@ import AuditLog from './pages/AuditLog';
 import LoginPage from './pages/LoginPage';
 import UserCenter from './pages/UserCenter';
 import ToolMarket from './pages/ToolMarket';
+import ToolDetail from './pages/ToolDetail';
 import WorkflowList from './pages/WorkflowList';
+import WorkflowDetail from './pages/WorkflowDetail';
+import WorkflowCreate from './pages/WorkflowCreate';
 import RoleMarket from './pages/RoleMarket';
-import AssemblyView from './pages/AssemblyView';
+import RoleDetail from './pages/RoleDetail';
 import AgentBuilder from './pages/AgentBuilder';
+import AgentDetail from './pages/AgentDetail';
 import OrchestrationPage from './pages/OrchestrationPage';
-import SecurityPage from './pages/SecurityPage';
 import MonitoringDashboard from './pages/MonitoringDashboard';
 import ProjectManager from './pages/ProjectManager';
 import ProjectDetail from './pages/ProjectDetail';
@@ -40,10 +43,8 @@ const NAV: NavItem[] = [
   { id: 'tools', label: '工具库', icon: <Wrench size={16} /> },
   { id: 'workflows', label: '工作流', icon: <GitBranch size={16} /> },
   { id: 'roles-page', label: '角色', icon: <Users size={16} /> },
-  { id: 'assembly', label: '组装', icon: <Link2 size={16} /> },
   { id: 'agents', label: 'Agent', icon: <Bot size={16} /> },
   { id: 'orchestration', label: '编排', icon: <Network size={16} /> },
-  { id: 'security', label: '安全', icon: <Shield size={16} /> },
   { id: 'monitor', label: '监控', icon: <BarChart3 size={16} /> },
   { id: 'projects', label: '项目', icon: <FolderKanban size={16} /> },
 ];
@@ -64,10 +65,8 @@ type View =
   | { page: 'tools' }
   | { page: 'workflows' }
   | { page: 'roles-page' }
-  | { page: 'assembly' }
   | { page: 'agents' }
   | { page: 'orchestration' }
-  | { page: 'security' }
   | { page: 'monitor' }
   | { page: 'projects' }
   | { page: 'users' }
@@ -78,6 +77,11 @@ export default function App() {
   const [nav, setNav] = useState('projects');
   const [detailId, setDetailId] = useState<string | null>(null);
   const [projectDetailId, setProjectDetailId] = useState<number | null>(null);
+  const [workflowDetailId, setWorkflowDetailId] = useState<number | null>(null);
+  const [showWorkflowCreate, setShowWorkflowCreate] = useState(false);
+  const [roleDetail, setRoleDetail] = useState<any>(null);
+  const [toolDetail, setToolDetail] = useState<any>(null);
+  const [agentDetail, setAgentDetail] = useState<any>(null);
   const [collapsed, setCollapsed] = useState(false);
   const { isAdmin, rolePermissions, fetchMe, fetchUsers, loaded } = useAuth();
 
@@ -112,6 +116,61 @@ export default function App() {
   const openDetail = (changeId: string) => setDetailId(changeId);
 
   const renderContent = () => {
+    if (agentDetail) {
+      var handleSaveAgent = function(data: any) {
+        var uid = localStorage.getItem('current_user_id') || 'admin';
+        if (data.id) {
+          fetch('/api/agents/' + data.id, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid }, body: JSON.stringify(data) }).then(function() { setAgentDetail(null); });
+        } else {
+          fetch('/api/agents', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid }, body: JSON.stringify(data) }).then(function() { setAgentDetail(null); });
+        }
+      };
+      var handleDeleteAgent = function() {
+        if (agentDetail.id) { fetch('/api/agents/' + agentDetail.id, { method: 'DELETE', headers: { 'X-User-Id': localStorage.getItem('current_user_id') || 'admin' } }).then(function() { setAgentDetail(null); }); }
+      };
+      return <AgentDetail agent={agentDetail} onBack={() => setAgentDetail(null)} onSave={handleSaveAgent} onDelete={agentDetail.id ? handleDeleteAgent : undefined} />;
+    }
+    if (toolDetail) {
+      var handleSaveTool = function(data: any) {
+        var uid = localStorage.getItem('current_user_id') || 'admin';
+        if (data.id) {
+          fetch('/api/tools/' + data.id, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid }, body: JSON.stringify(data) }).then(function() { setToolDetail(null); });
+        } else {
+          fetch('/api/tools', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid }, body: JSON.stringify(data) }).then(function() { setToolDetail(null); });
+        }
+      };
+      var handleDeleteTool = function() {
+        if (toolDetail.id) { fetch('/api/tools/' + toolDetail.id, { method: 'DELETE', headers: { 'X-User-Id': localStorage.getItem('current_user_id') || 'admin' } }).then(function() { setToolDetail(null); }); }
+      };
+      return <ToolDetail tool={toolDetail} onBack={() => setToolDetail(null)} onSave={handleSaveTool} onDelete={toolDetail.id ? handleDeleteTool : undefined} />;
+    }
+    if (roleDetail) {
+      var builtinTemplates = [
+        { id: 'architect', name: '架构师' }, { id: 'senior-pm', name: '高级产品经理' },
+        { id: 'user-evaluator', name: '资深用户评测员' }, { id: 'security-auditor', name: '安全审计师' },
+        { id: 'domain-expert', name: '领域专家' }, { id: 'ui-designer', name: '资深UI设计师' },
+        { id: 'ux-officer', name: '资深用户体验官' }, { id: 'frontend-architect', name: '前端架构师' },
+        { id: 'a11y-expert', name: '无障碍专家' }, { id: 'eng-efficiency', name: '工程效能专家' },
+        { id: 'dev-lead', name: '研发负责人' }, { id: 'test-engineer', name: '资深测试工程师' },
+      ];
+      var handleSaveRole = function(data: any) {
+        var uid = localStorage.getItem('current_user_id') || 'admin';
+        if (data.id) {
+          fetch('/api/roles/custom/' + data.id, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid }, body: JSON.stringify(data) }).then(function() { setRoleDetail(null); });
+        } else {
+          fetch('/api/roles/custom', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid }, body: JSON.stringify(data) }).then(function() { setRoleDetail(null); });
+        }
+      };
+      var handleDeleteRole = function() {
+        if (roleDetail.id) {
+          var uid = localStorage.getItem('current_user_id') || 'admin';
+          fetch('/api/roles/custom/' + roleDetail.id, { method: 'DELETE', headers: { 'X-User-Id': uid } }).then(function() { setRoleDetail(null); });
+        }
+      };
+      return <RoleDetail role={roleDetail} templates={builtinTemplates} onBack={() => setRoleDetail(null)} onSave={handleSaveRole} onDelete={roleDetail.id ? handleDeleteRole : undefined} />;
+    }
+    if (showWorkflowCreate) return <WorkflowCreate onBack={() => setShowWorkflowCreate(false)} onCreated={(id) => { setShowWorkflowCreate(false); setWorkflowDetailId(id); }} />;
+    if (workflowDetailId) return <WorkflowDetail workflowId={workflowDetailId} onBack={() => setWorkflowDetailId(null)} />;
     if (projectDetailId) return <ProjectDetail projectId={projectDetailId} onBack={() => setProjectDetailId(null)} />;
     if (detailId) return <Detail changeId={detailId} onBack={() => setDetailId(null)} />;
     switch (nav) {
@@ -123,13 +182,11 @@ export default function App() {
       case 'docs': return perm('project:write') ? <DocEditor /> : <EmptyPerm />;
       case 'users': return perm('user:manage') ? <UserManagement /> : <EmptyPerm />;
       case 'audit': return perm('audit:view') ? <AuditLog /> : <EmptyPerm />;
-      case 'tools': return perm('project:read') ? <ToolMarket /> : <EmptyPerm />;
-      case 'workflows': return perm('project:write') ? <WorkflowList /> : <EmptyPerm />;
-      case 'roles-page': return perm('project:read') ? <RoleMarket /> : <EmptyPerm />;
-      case 'assembly': return perm('project:write') ? <AssemblyView /> : <EmptyPerm />;
-      case 'agents': return perm('project:read') ? <AgentBuilder /> : <EmptyPerm />;
+      case 'tools': return perm('project:read') ? <ToolMarket onSelect={(t) => setToolDetail(t)} /> : <EmptyPerm />;
+      case 'workflows': return perm('project:write') ? <WorkflowList onSelect={function(id) { setWorkflowDetailId(id); }} onCreate={() => setShowWorkflowCreate(true)} /> : <EmptyPerm />;
+      case 'roles-page': return perm('project:read') ? <RoleMarket onSelectRole={(r) => setRoleDetail(r)} /> : <EmptyPerm />;
+      case 'agents': return perm('project:read') ? <AgentBuilder onSelect={(a) => setAgentDetail(a)} /> : <EmptyPerm />;
       case 'orchestration': return perm('project:write') ? <OrchestrationPage /> : <EmptyPerm />;
-      case 'security': return perm('project:read') ? <SecurityPage /> : <EmptyPerm />;
       case 'monitor': return perm('project:read') ? <MonitoringDashboard /> : <EmptyPerm />;
       case 'projects': return perm('project:read') ? <ProjectManager onSelect={(id) => setProjectDetailId(id)} /> : <EmptyPerm />;
       case 'profile': return <UserCenter onBack={() => navigate('projects')} />;

@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, GitBranch, BarChart3 } from 'lucide-react';
+import { Plus, Trash2, GitBranch } from 'lucide-react';
 import { useWorkflows } from '../stores/workflows';
 import { useTools } from '../stores/tools';
 import ConfirmDialog from '../components/ConfirmDialog';
-import EntityMonitor from '../components/EntityMonitor';
 
-export default function WorkflowList() {
+interface Props { onSelect?: (id: number) => void; onCreate?: () => void; }
+
+export default function WorkflowList({ onSelect, onCreate }: Props) {
   const { workflows, fetchWorkflows, createWorkflow, deleteWorkflow, publishWorkflow, executeWorkflow, loading } = useWorkflows();
   const { tools, fetchTools } = useTools();
   const [showCreate, setShowCreate] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [monitorWf, setMonitorWf] = useState<any>(null);
   const [form, setForm] = useState({ name: '', description: '' });
 
   useEffect(() => { fetchWorkflows(); fetchTools(); }, []);
@@ -28,14 +28,14 @@ export default function WorkflowList() {
     <div style={{ padding: 24, height: '100%', overflow: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, margin: 0 }}>工作流</h1>
-        <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>
-          <Plus size={14} /> 新建工作流
+        <button onClick={function() { if (onCreate) onCreate(); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>
+          <Plus size={14} /> 创建工作流
         </button>
       </div>
       {loading ? <p style={{ color: 'var(--color-text-dim)' }}>加载中...</p> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
           {workflows.map((wf) => (
-            <div key={wf.id} style={{ background: 'var(--surface, #181a1f)', borderRadius: 8, padding: 16, border: '1px solid var(--border-normal, #2a2d35)', cursor: 'default' }}>
+            <div key={wf.id} onClick={function() { if (onSelect) onSelect(wf.id); }} style={{ background: 'var(--surface, #181a1f)', borderRadius: 8, padding: 16, border: '1px solid var(--border-normal, #2a2d35)', cursor: onSelect ? 'pointer' : 'default' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <GitBranch size={18} color="var(--color-primary)" />
@@ -43,10 +43,9 @@ export default function WorkflowList() {
                   <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: statusColor(wf.status), color: '#fff' }}>{statusLabel(wf.status)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 4 }}>
-                  {wf.status === 'draft' && <button onClick={() => publishWorkflow(wf.id)} style={{ padding: '4px 8px', background: 'var(--color-success)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>发布</button>}
-                  {wf.status === 'published' && <span style={{ fontSize: 10, color: 'var(--text-dim)', padding: '2px 6px', background: 'var(--bg-input)', borderRadius: 3 }}>通过 Agent 运行</span>}
-                  <button onClick={() => setMonitorWf(wf)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }} title="监控"><BarChart3 size={14} /></button>
-                  {wf.status !== 'running' && <button onClick={() => setDeleteId(wf.id)} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)' }} title="删除"><Trash2 size={14} /></button>}
+                  {wf.status === 'draft' && <button onClick={function(e) { e.stopPropagation(); publishWorkflow(wf.id); }} style={{ padding: '4px 8px', background: 'var(--color-success)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>发布</button>}
+                  {wf.status === 'published' && <span style={{ fontSize: 10, color: 'var(--text-dim)', padding: '2px 6px', background: 'var(--bg-input)', borderRadius: 3 }}>点击进入详情</span>}
+                  {wf.status !== 'running' && <button onClick={function(e) { e.stopPropagation(); setDeleteId(wf.id); }} style={{ padding: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)' }} title="删除"><Trash2 size={14} /></button>}
                 </div>
               </div>
               <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8 }}>{wf.description || '暂无描述'}</div>

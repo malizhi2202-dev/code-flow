@@ -18,6 +18,7 @@ class Agent(Base):
     model_config_json: Mapped[dict] = mapped_column(JSON, default=dict)
     api_key_encrypted: Mapped[str] = mapped_column(String(512), nullable=False)
     workflow_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workflows.id"), nullable=True)
+    workflow_ids: Mapped[dict] = mapped_column(JSON, default=list)  # [1, 2, 3] 绑定多个工作流
     token_soft_limit: Mapped[int] = mapped_column(Integer, default=800000)
     token_hard_limit: Mapped[int] = mapped_column(Integer, default=1000000)
     total_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
