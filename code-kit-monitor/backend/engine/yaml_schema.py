@@ -79,7 +79,7 @@ ORCHESTRATION_SCHEMA = {
                         "properties": {
                             "from": {"type": "string", "minLength": 1},
                             "to": {"type": "string", "minLength": 1},
-                            "type": {"type": "string", "enum": ["sequential", "parallel", "fork", "condition"]},
+                            "type": {"type": "string", "enum": ["sequential", "pipeline", "parallel", "fan-out", "fan-in", "map-reduce", "fork", "condition", "master-slave", "event-trigger", "human-approval", "retry-fallback", "dead-letter"]},
                             "condition": {"type": "string"},
                         },
                     },
