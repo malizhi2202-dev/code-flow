@@ -42,6 +42,9 @@ async def lifespan(app: FastAPI):
     # 启动 runtime.jsonl 文件监控器（每 30s 增量导入 code-kit 运行时数据）
     from services.runtime_watcher import start_watcher
     start_watcher()
+    # 启动 metrics 模拟数据生成器（每 5 分钟注入演示数据）
+    from services.metrics_scheduler import start_scheduler
+    start_scheduler(owner_id="admin", interval_seconds=300)
     yield
     print("[monitor] 关闭.")
 
@@ -77,6 +80,54 @@ async def auth_middleware(request: Request, call_next):
         user = get_user("admin")  # 默认 admin
     request.state.user = user
     return await call_next(request)
+
+
+# 运行时 Metrics 收集中间件（兜底 — 自动追踪关键 API 调用）
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    import time
+    start = time.time()
+    response = await call_next(request)
+    duration_ms = int((time.time() - start) * 1000)
+
+    # 只追踪有副作用的 API（chat/run/execute）
+    path = request.url.path
+    method = request.method
+    if method in ("POST", "PUT") and any(k in path for k in ("/chat", "/run", "/execute", "/stop")):
+        try:
+            from services.runtime_tracer import tracer
+            user = getattr(request.state, "user", {"id": "admin"})
+            # 从路径推断 entity_type 和 entity_id
+            import re
+            entity_type = "agent"
+            entity_id = 0
+            if "/agents/" in path:
+                m = re.search(r'/agents/(\d+)', path)
+                entity_type = "agent"
+                entity_id = int(m.group(1)) if m else 0
+            elif "/projects/" in path:
+                m = re.search(r'/projects/(\d+)', path)
+                entity_type = "project"
+                entity_id = int(m.group(1)) if m else 0
+            elif "/orchestration/" in path:
+                entity_type = "orchestration"
+                m = re.search(r'/orchestration/(\d+)', path)
+                entity_id = int(m.group(1)) if m else 0
+
+            tracer.trace_model_call(
+                entity_type=entity_type, entity_id=entity_id,
+                owner_id=user.get("id", "admin"),
+                model_name="auto-traced",
+                prompt_tokens=0, completion_tokens=0,
+                duration_ms=duration_ms,
+                tool_name=path.split("/")[-1] if "/" in path else path,
+                tool_calls=1,
+                status="success" if response.status_code < 400 else "error",
+            )
+        except Exception:
+            pass  # 追踪失败不影响业务
+
+    return response
 
 
 app.include_router(changes_router)
