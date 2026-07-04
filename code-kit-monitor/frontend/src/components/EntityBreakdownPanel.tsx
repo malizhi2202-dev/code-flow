@@ -15,18 +15,26 @@ const COLORS: Record<string, string> = {
   orchestration: '#a855f7',
 };
 
+const TIME_RANGES = [
+  { label: '15min', minutes: 15 },
+  { label: '60min', minutes: 60 },
+  { label: '6h', minutes: 360 },
+  { label: '24h', minutes: 1440 },
+];
+
 export default function EntityBreakdownPanel({ entityType, entityId, entityName }: Props) {
   const [data, setData] = useState<any>(null);
+  const [minutes, setMinutes] = useState(60);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (key: string) => setExpanded(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
   const uid = () => localStorage.getItem('current_user_id') || 'admin';
   const mainColor = COLORS[entityType] || '#5cb878';
 
   useEffect(() => {
-    fetch(`/api/metrics/entity/${entityType}/${entityId}/breakdown?minutes=60`, {
+    fetch(`/api/metrics/entity/${entityType}/${entityId}/breakdown?minutes=${minutes}`, {
       headers: { 'X-User-Id': uid() },
     }).then(r => r.json()).then(d => setData(d)).catch(() => setData(null));
-  }, [entityType, entityId]);
+  }, [entityType, entityId, minutes]);
 
   if (!data) return <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>加载中...</div>;
   if (data.total_tokens === 0 && data.total_calls === 0) return <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>暂无消耗数据</div>;
@@ -39,18 +47,38 @@ export default function EntityBreakdownPanel({ entityType, entityId, entityName 
     <div>
       {/* 自身消耗总览 */}
       <div style={panel}>
-        <h3 style={sectionTitle}>
-          {entityType === 'agent' ? '🤖' : entityType === 'workflow' ? '🔀' : entityType === 'orchestration' ? '🔀' : '🔧'}
-          {' '}{entityName || entityType} 消耗（最近 60 分钟）
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ ...sectionTitle, margin: 0 }}>
+            {entityType === 'agent' ? '🤖' : entityType === 'workflow' ? '🔀' : entityType === 'orchestration' ? '🔀' : '🔧'}
+            {' '}{entityName || entityType} 消耗
+          </h3>
+          <div style={{ display: 'flex', gap: 2, background: 'var(--bg-input)', borderRadius: 4, padding: 2 }}>
+            {TIME_RANGES.map(tr => (
+              <button key={tr.minutes} onClick={() => setMinutes(tr.minutes)}
+                style={{
+                  padding: '3px 10px', fontSize: 11, border: 'none', borderRadius: 3, cursor: 'pointer',
+                  background: minutes === tr.minutes ? 'var(--color-primary)' : 'transparent',
+                  color: minutes === tr.minutes ? '#fff' : 'var(--text-secondary)',
+                }}>{tr.label}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 2 }}>总消耗</div>
-            <div style={{ fontSize: 18, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-text)' }}>{data.total_tokens?.toLocaleString()} tokens</div>
+            <div style={{ fontSize: 16, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-text)' }}>{data.total_tokens?.toLocaleString()}</div>
           </div>
           <div>
             <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 2 }}>平均/min</div>
-            <div style={{ fontSize: 18, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-text)' }}>{data.avg_tokens_per_min?.toLocaleString()}</div>
+            <div style={{ fontSize: 16, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-text)' }}>{data.avg_tokens_per_min?.toLocaleString()}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 2 }}>成功率</div>
+            <div style={{ fontSize: 16, fontFamily: 'var(--font-mono)', fontWeight: 600, color: data.success_rate >= 90 ? '#5cb878' : data.success_rate >= 70 ? '#e8a450' : '#dc2626' }}>{data.success_rate}%</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 2 }}>平均耗时</div>
+            <div style={{ fontSize: 16, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-text)' }}>{data.avg_duration_ms ? (data.avg_duration_ms / 1000).toFixed(1) + 's' : '-'}</div>
           </div>
         </div>
 
@@ -203,6 +231,21 @@ export default function EntityBreakdownPanel({ entityType, entityId, entityName 
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* 模型分布 */}
+      {data.model_totals && Object.keys(data.model_totals).length > 0 && (
+        <div style={panel}>
+          <h3 style={sectionTitle}>🧠 模型分布</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {Object.entries(data.model_totals).map(([model, tokens]: [string, any]) => (
+              <span key={model} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, background: 'var(--bg-input)', border: '1px solid var(--color-border)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {model}
+                <span style={{ color: mainColor, fontWeight: 600 }}>{(tokens as number).toLocaleString()}</span>
+              </span>
+            ))}
+          </div>
         </div>
       )}
 

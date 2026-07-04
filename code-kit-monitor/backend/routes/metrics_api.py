@@ -8,6 +8,57 @@ from services.metrics_service import get_metrics, get_global_metrics, record_met
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
 
+def _resolve_owner(entity_type: str, entity_id: int, db: Session) -> str | None:
+    """统一解析实体 owner_id，用于数据隔离。返回 None 表示全局。"""
+    if entity_type == "agent":
+        from models.agent import Agent
+        ag = db.query(Agent).filter(Agent.id == entity_id).first()
+        return ag.owner_id if ag else None
+    elif entity_type == "orchestration":
+        from models.orchestration import OrchestrationInstance
+        oi = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == entity_id).first()
+        return oi.owner_id if oi else None
+    elif entity_type == "project":
+        from models.project import Project as Pj
+        pj = db.query(Pj).filter(Pj.id == entity_id).first()
+        return pj.owner_id if pj else None
+    elif entity_type == "workflow":
+        return "admin"
+    elif entity_type == "tool":
+        return None  # tool 按 user 隔离，在具体查询中处理
+    return None
+
+
+def _owner_filter(query, owner_id: str | None):
+    """统一加 owner 过滤。None 表示不加（全局/admin）。"""
+    if owner_id:
+        return query.filter(SessionMetric.owner_id == owner_id)
+    return query
+
+
+def _calc_success_rate(sessions) -> float:
+    total = len(sessions)
+    if total == 0:
+        return 0.0
+    success = sum(1 for s in sessions if s.status == "success")
+    return round(success / total * 100, 1)
+
+
+def _calc_avg_duration(sessions) -> int:
+    total = len(sessions)
+    if total == 0:
+        return 0
+    return sum(s.duration_ms or 0 for s in sessions) // total
+
+
+def _model_totals(sessions) -> dict:
+    mt: dict[str, int] = {}
+    for s in sessions:
+        if s.model_name:
+            mt[s.model_name] = mt.get(s.model_name, 0) + s.total_tokens
+    return dict(sorted(mt.items(), key=lambda x: -x[1]))
+
+
 @router.get("/{entity_type}/{entity_id}")
 def api_get_metrics(entity_type: str, entity_id: int, minutes: int = 60, request: Request = None, db: Session = Depends(get_db)):
     return get_metrics(db, entity_type, entity_id, minutes)
@@ -22,12 +73,24 @@ def api_get_global_metrics(minutes: int = 60, request: Request = None, db: Sessi
 
 
 @router.get("/sessions")
-def api_get_sessions(entity_type: str | None = None, limit: int = 50, request: Request = None, db: Session = Depends(get_db)):
-    """获取会话级监控数据."""
+def api_get_sessions(entity_type: str | None = None, entity_id: int | None = None, limit: int = 50, minutes: int = 1440, request: Request = None, db: Session = Depends(get_db)):
+    """获取会话级监控数据（已做 owner 隔离）."""
     from models.metrics import SessionMetric
-    q = db.query(SessionMetric)
+    from datetime import datetime, timedelta
+    since = datetime.utcnow() - timedelta(minutes=minutes)
+
+    q = db.query(SessionMetric).filter(SessionMetric.timestamp >= since)
     if entity_type:
         q = q.filter(SessionMetric.entity_type == entity_type)
+    if entity_id:
+        q = q.filter(SessionMetric.entity_id == entity_id)
+
+    # owner 隔离：解析 entity 的 owner 并过滤
+    if entity_type and entity_id:
+        owner_id = _resolve_owner(entity_type, entity_id, db)
+        if owner_id:
+            q = q.filter(SessionMetric.owner_id == owner_id)
+
     sessions = q.order_by(SessionMetric.timestamp.desc()).limit(limit).all()
     return {"sessions": [s.to_dict() for s in sessions], "total": len(sessions)}
 
@@ -88,40 +151,35 @@ def api_record_metric(payload: dict, request: Request = None, db: Session = Depe
 
 @router.get("/entity/{entity_type}/{entity_id}/breakdown")
 def api_entity_breakdown_detail(entity_type: str, entity_id: int, minutes: int = 60, request: Request = None, db: Session = Depends(get_db)):
-    """单实体消耗分拆：自身 + 子工作流 + 工具，1min 桶."""
+    """单实体消耗分拆：自身 + 子工作流 + 工具，1min 桶。含成功率/时长/模型分布。"""
     from datetime import datetime, timedelta
     from models.metrics import SessionMetric
     from models.agent import Agent
     from models.workflow import Workflow
 
     since = datetime.utcnow() - timedelta(minutes=minutes)
+    owner_id = _resolve_owner(entity_type, entity_id, db)
 
-    # 解析 owner_id（数据隔离）
-    owner_id = None
-    if entity_type == "agent":
-        ag = db.query(Agent).filter(Agent.id == entity_id).first()
-        owner_id = ag.owner_id if ag else None
-    elif entity_type == "workflow":
-        wf = db.query(Workflow).filter(Workflow.id == entity_id).first()
-        owner_id = "admin"  # workflow 无 owner_id 字段，默认隔离到 admin
-    elif entity_type == "orchestration":
-        from models.orchestration import OrchestrationInstance
-        orch = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == entity_id).first()
-        owner_id = orch.owner_id if orch else None
-    elif entity_type == "project":
-        from models.project import Project as Pj
-        pj = db.query(Pj).filter(Pj.id == entity_id).first()
-        owner_id = pj.owner_id if pj else None
-
-    base_filter = [
-        SessionMetric.entity_type == entity_type,
-        SessionMetric.entity_id == entity_id,
-        SessionMetric.timestamp >= since,
-    ]
-    if owner_id:
-        base_filter.append(SessionMetric.owner_id == owner_id)
-
-    sessions = db.query(SessionMetric).filter(*base_filter).order_by(SessionMetric.timestamp.asc()).all()
+    # 工具维度特殊处理：按 tool_name 聚合
+    if entity_type == "tool":
+        # entity_id 为 tool_name 的 hash 或直接用 tool_name 字符串
+        # 这里假设 entity_id 传 0，tool_name 通过 query param 传入
+        tool_name = request.query_params.get("tool_name", "") if request else ""
+        q = db.query(SessionMetric).filter(
+            SessionMetric.tool_name == tool_name,
+            SessionMetric.timestamp >= since,
+        )
+        q = _owner_filter(q, owner_id)
+        sessions = q.order_by(SessionMetric.timestamp.asc()).limit(5000).all()
+    else:
+        base_filter = [
+            SessionMetric.entity_type == entity_type,
+            SessionMetric.entity_id == entity_id,
+            SessionMetric.timestamp >= since,
+        ]
+        if owner_id:
+            base_filter.append(SessionMetric.owner_id == owner_id)
+        sessions = db.query(SessionMetric).filter(*base_filter).order_by(SessionMetric.timestamp.asc()).limit(5000).all()
 
     # 自身时序桶
     buckets: dict[int, int] = {}
@@ -145,6 +203,9 @@ def api_entity_breakdown_detail(entity_type: str, entity_id: int, minutes: int =
         "entity_type": entity_type, "entity_id": entity_id, "minutes": minutes,
         "total_tokens": total_tokens, "total_calls": total_calls,
         "avg_tokens_per_min": round(total_tokens / max(minutes, 1)),
+        "success_rate": _calc_success_rate(sessions),
+        "avg_duration_ms": _calc_avg_duration(sessions),
+        "model_totals": _model_totals(sessions),
         "buckets": [{"ts": ts, "tokens": v} for ts, v in sorted(buckets.items())],
         "tools": sorted(tool_info.values(), key=lambda x: -x["tokens"]),
     }
@@ -381,6 +442,78 @@ def api_project_breakdown(project_id: int, minutes: int = 60, request: Request =
         "agents": sorted(agent_info.values(), key=lambda x: -x["total_tokens"]),
         "workflows": sorted(wf_info.values(), key=lambda x: -x["total_tokens"]),
     }
+
+
+# ── 消耗排行榜 ──
+
+@router.get("/rankings")
+def api_rankings(dimension: str = "agent", metric: str = "total_tokens", top: int = 10, minutes: int = 1440, request: Request = None, db: Session = Depends(get_db)):
+    """全局消耗排行榜：按维度(agent/workflow/tool/orchestration/project)排行."""
+    from datetime import datetime, timedelta
+    from models.metrics import SessionMetric
+    from models.agent import Agent
+    from models.workflow import Workflow
+
+    since = datetime.utcnow() - timedelta(minutes=minutes)
+
+    if dimension == "tool":
+        rows = db.query(
+            SessionMetric.tool_name,
+            func.sum(SessionMetric.total_tokens).label("tokens"),
+            func.count(SessionMetric.id).label("calls"),
+        ).filter(
+            SessionMetric.timestamp >= since,
+            SessionMetric.tool_name != "",
+        ).group_by(SessionMetric.tool_name).order_by(func.sum(SessionMetric.total_tokens).desc()).limit(top).all()
+        return [{"name": r.tool_name, "tokens": int(r.tokens or 0), "calls": int(r.calls or 0)} for r in rows]
+
+    elif dimension == "agent":
+        rows = db.query(
+            SessionMetric.entity_id,
+            func.sum(SessionMetric.total_tokens).label("tokens"),
+            func.count(SessionMetric.id).label("calls"),
+        ).filter(
+            SessionMetric.entity_type == "agent",
+            SessionMetric.timestamp >= since,
+        ).group_by(SessionMetric.entity_id).order_by(func.sum(SessionMetric.total_tokens).desc()).limit(top).all()
+        result = []
+        for r in rows:
+            ag = db.query(Agent).filter(Agent.id == r.entity_id).first()
+            result.append({"id": r.entity_id, "name": ag.name if ag else f"Agent#{r.entity_id}", "tokens": int(r.tokens or 0), "calls": int(r.calls or 0)})
+        return result
+
+    elif dimension == "workflow":
+        rows = db.query(
+            SessionMetric.entity_id,
+            func.sum(SessionMetric.total_tokens).label("tokens"),
+            func.count(SessionMetric.id).label("calls"),
+        ).filter(
+            SessionMetric.entity_type == "workflow",
+            SessionMetric.timestamp >= since,
+        ).group_by(SessionMetric.entity_id).order_by(func.sum(SessionMetric.total_tokens).desc()).limit(top).all()
+        result = []
+        for r in rows:
+            wf = db.query(Workflow).filter(Workflow.id == r.entity_id).first()
+            result.append({"id": r.entity_id, "name": wf.name if wf else f"WF#{r.entity_id}", "tokens": int(r.tokens or 0), "calls": int(r.calls or 0)})
+        return result
+
+    elif dimension == "project":
+        from models.project import Project as Pj
+        rows = db.query(
+            SessionMetric.entity_id,
+            func.sum(SessionMetric.total_tokens).label("tokens"),
+            func.count(SessionMetric.id).label("calls"),
+        ).filter(
+            SessionMetric.entity_type == "project",
+            SessionMetric.timestamp >= since,
+        ).group_by(SessionMetric.entity_id).order_by(func.sum(SessionMetric.total_tokens).desc()).limit(top).all()
+        result = []
+        for r in rows:
+            pj = db.query(Pj).filter(Pj.id == r.entity_id).first()
+            result.append({"id": r.entity_id, "name": pj.name if pj else f"Project#{r.entity_id}", "tokens": int(r.tokens or 0), "calls": int(r.calls or 0)})
+        return result
+
+    return []
 
 
 # ── Orchestration 拓扑级 Metrics ──
