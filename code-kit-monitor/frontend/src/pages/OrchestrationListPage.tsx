@@ -3,12 +3,10 @@ import { useEffect, useState } from 'react';
 import { Plus, FileText, FileCode, Pencil, Trash2, BarChart3 } from 'lucide-react';
 import { useOrchestration } from '../stores/orchestration';
 import ConfirmDialog from '../components/ConfirmDialog';
-import EntityBreakdownPanel from '../components/EntityBreakdownPanel';
 
 export default function OrchestrationListPage() {
   const { orchestrations, fetchOrchestrations } = useOrchestration();
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [monitorOrchId, setMonitorOrchId] = useState<number | null>(null);
 
   useEffect(() => { fetchOrchestrations(); }, []);
 
@@ -50,25 +48,13 @@ export default function OrchestrationListPage() {
             <div style={{ display: 'flex', gap: 4 }}>
               <a href={`/orchestration/${orch.id}/md`} title="查看 MD" style={{ padding: '4px 8px', background: 'none', border: bd, borderRadius: 'var(--r-sm)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}><FileText size={12} /> MD</a>
               <a href={`/orchestration/${orch.id}/yaml`} title="查看 YAML" style={{ padding: '4px 8px', background: 'none', border: bd, borderRadius: 'var(--r-sm)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}><FileCode size={12} /> YAML</a>
-              <button onClick={() => setMonitorOrchId(monitorOrchId === orch.id ? null : orch.id)} style={{ padding: '4px 10px', background: monitorOrchId === orch.id ? 'rgba(168,85,247,0.1)' : 'none', border: monitorOrchId === orch.id ? '1px solid #a855f7' : '1px solid var(--border)', borderRadius: 'var(--r-sm)', color: monitorOrchId === orch.id ? '#a855f7' : 'var(--text-secondary)', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}><BarChart3 size={12} /> 监控</button>
+              <a href={`/orchestration/${orch.id}/monitor`} style={{ padding: '4px 10px', background: 'none', border: '1px solid #a855f7', borderRadius: 'var(--r-sm)', color: '#a855f7', cursor: 'pointer', fontSize: 11, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}><BarChart3 size={12} /> 监控</a>
               <a href={`/orchestration/${orch.id}/edit`} style={{ padding: '4px 10px', background: 'none', border: '1px solid var(--color-primary)', borderRadius: 'var(--r-sm)', color: 'var(--color-primary)', cursor: 'pointer', fontSize: 11, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}><Pencil size={12} /> 编辑画布</a>
               <button onClick={() => setDeleteId(orch.id)} style={{ padding: '4px 6px', background: 'none', border: '1px solid transparent', borderRadius: 'var(--r-sm)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11 }}><Trash2 size={12} /></button>
             </div>
           </div>
         ))}
       </div>
-
-      {monitorOrchId && (
-        <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 16, fontWeight: 600, margin: 0 }}>
-              📊 {orchestrations.find(o => o.id === monitorOrchId)?.name || '编排'} 监控
-            </h2>
-            <button onClick={() => setMonitorOrchId(null)} style={{ padding: '4px 10px', fontSize: 11, background: 'none', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)' }}>关闭</button>
-          </div>
-          <EntityBreakdownPanel entityType="orchestration" entityId={monitorOrchId} entityName={orchestrations.find(o => o.id === monitorOrchId)?.name || '编排组'} />
-        </div>
-      )}
 
       {deleteId && <ConfirmDialog open={true} title="确认删除" message="确定删除此编排实例？" onConfirm={() => handleDelete(deleteId)} onCancel={() => setDeleteId(null)} />}
     </div>
