@@ -82,8 +82,12 @@ export default function OrchestrationPage() {
     debounceRef.current = setTimeout(() => {
       const text = showYaml ? yamlContent : '';
       if (!text) return;
-      const { nodes, edges, edgeConfigs: ecs } = yamlToTopology(text);
-      setTopologyState({ nodes, edges });
+      const { nodes: agentNodes, edges, edgeConfigs: ecs } = yamlToTopology(text);
+      // Prepend Start + append End nodes (Dify style)
+      const startNode = { id: 'start', type: 'startNode', position: { x: 80, y: 200 }, data: { label: 'START' } };
+      const endNode = { id: 'end', type: 'endNode', position: { x: 80 + agentNodes.length * 260 + 200, y: 200 }, data: { label: 'END' } };
+      const allNodes = [startNode, ...agentNodes, endNode];
+      setTopologyState({ nodes: allNodes, edges });
       ecs.forEach((ec, id) => setEdgeConfig(id, ec));
       yamlDirtyRef.current = false;
     }, 300);
