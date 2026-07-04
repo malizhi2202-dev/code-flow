@@ -81,3 +81,95 @@ def api_record_metric(payload: dict, request: Request = None, db: Session = Depe
     owner = user["id"] if user else "system"
     record_metric(db, payload["entity_type"], payload["entity_id"], owner, payload.get("model_name", ""), payload.get("token_count", 0), payload.get("tool_hit_count", 0), payload.get("execution_time_ms", 0), payload.get("status", "success"))
     return {"status": "recorded"}
+
+
+# ── Orchestration 拓扑级 Metrics ──
+
+@router.get("/orchestration/{instance_id}")
+def api_orchestration_metrics(instance_id: int, minutes: int = 60, request: Request = None, db: Session = Depends(get_db)):
+    """拓扑级监控聚合：总 token、平均执行时间、成功率、时序."""
+    from models.orchestration import TraceSpan, OrchestrationInstance
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+
+    inst = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == instance_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="编排实例不存在")
+
+    since = datetime.utcnow() - timedelta(minutes=minutes)
+    spans = db.query(TraceSpan).filter(
+        TraceSpan.instance_id == instance_id,
+        TraceSpan.timestamp >= since,
+    ).all()
+
+    total_tokens = sum(s.tokens for s in spans)
+    total_calls = len(spans)
+    avg_duration = int(sum(s.duration_ms for s in spans) / total_calls) if total_calls else 0
+    success_count = sum(1 for s in spans if s.span_type == "agent_call")
+    success_rate = round(success_count / total_calls * 100, 1) if total_calls else 0
+
+    # 5min 粒度时序
+    timeline: dict[str, dict] = {}
+    for s in spans:
+        bucket = s.timestamp.strftime("%Y-%m-%dT%H:%M")
+        if bucket not in timeline:
+            timeline[bucket] = {"tokens": 0, "calls": 0}
+        timeline[bucket]["tokens"] += s.tokens
+        timeline[bucket]["calls"] += 1
+
+    return {
+        "instance_id": instance_id,
+        "total_tokens": total_tokens,
+        "total_calls": total_calls,
+        "avg_duration_ms": avg_duration,
+        "success_rate": success_rate,
+        "timeline": {k: v for k, v in sorted(timeline.items())},
+        "minutes": minutes,
+    }
+
+
+@router.get("/orchestration/{instance_id}/trace")
+def api_orchestration_trace(instance_id: int, request: Request = None, db: Session = Depends(get_db)):
+    """调用链追踪：返回所有 TraceSpan."""
+    from models.orchestration import TraceSpan as TS
+    spans = db.query(TS).filter(
+        TS.instance_id == instance_id
+    ).order_by(TS.timestamp).all()
+    return [
+        {
+            "id": s.id, "from_agent_id": s.from_agent_id, "to_agent_id": s.to_agent_id,
+            "duration_ms": s.duration_ms, "tokens": s.tokens,
+            "span_type": s.span_type, "timestamp": s.timestamp.isoformat(),
+        }
+        for s in spans
+    ]
+
+
+@router.get("/orchestration/{instance_id}/trace/{span_id}")
+def api_trace_span_detail(instance_id: int, span_id: int, request: Request = None, db: Session = Depends(get_db)):
+    """单个 span 详情（含 input/output 摘要，不返回完整内容）."""
+    from models.orchestration import TraceSpan as TS
+    span = db.query(TS).filter(TS.id == span_id, TS.instance_id == instance_id).first()
+    if not span:
+        raise HTTPException(status_code=404, detail="span 不存在")
+    return {
+        "id": span.id, "from_agent_id": span.from_agent_id, "to_agent_id": span.to_agent_id,
+        "duration_ms": span.duration_ms, "tokens": span.tokens,
+        "input_hash": span.input_hash, "output_hash": span.output_hash,
+        "span_type": span.span_type, "timestamp": span.timestamp.isoformat(),
+    }
+
+
+@router.get("/orchestration/queue/depth")
+def api_queue_depth(request: Request = None, db: Session = Depends(get_db)):
+    """调度队列深度 + 等待时间."""
+    from models.orchestration import SchedulingQueue as SQ
+    from datetime import datetime
+    now = datetime.utcnow()
+    entries = db.query(SQ).filter(SQ.status.in_(["queued", "scheduled"])).all()
+    wait_times = [(now - e.enqueued_at).total_seconds() for e in entries if e.enqueued_at]
+    return {
+        "depth": len(entries),
+        "avg_wait_seconds": round(sum(wait_times) / len(wait_times), 1) if wait_times else 0,
+        "max_wait_seconds": round(max(wait_times), 1) if wait_times else 0,
+    }
