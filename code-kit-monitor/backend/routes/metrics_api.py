@@ -25,7 +25,7 @@ def _resolve_owner(entity_type: str, entity_id: int, db: Session) -> str | None:
     elif entity_type == "workflow":
         return "admin"
     elif entity_type == "tool":
-        return None  # tool 按 user 隔离，在具体查询中处理
+        return None  # tool 按请求 user 隔离
     return None
 
 
@@ -162,15 +162,18 @@ def api_entity_breakdown_detail(entity_type: str, entity_id: int, minutes: int =
 
     # 工具维度特殊处理：按 tool_name 聚合
     if entity_type == "tool":
-        # entity_id 为 tool_name 的 hash 或直接用 tool_name 字符串
-        # 这里假设 entity_id 传 0，tool_name 通过 query param 传入
         tool_name = request.query_params.get("tool_name", "") if request else ""
+        if not tool_name:
+            raise HTTPException(status_code=400, detail="tool_name 参数必填")
         q = db.query(SessionMetric).filter(
             SessionMetric.tool_name == tool_name,
             SessionMetric.timestamp >= since,
         )
-        q = _owner_filter(q, owner_id)
+        if owner_id:
+            q = q.filter(SessionMetric.owner_id == owner_id)
         sessions = q.order_by(SessionMetric.timestamp.asc()).limit(5000).all()
+        # 重设 entity_type 以匹配后续逻辑
+        entity_type = "tool"
     else:
         base_filter = [
             SessionMetric.entity_type == entity_type,

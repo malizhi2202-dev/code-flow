@@ -6,6 +6,7 @@ interface Props {
   entityType: string;
   entityId: number;
   entityName?: string;
+  toolName?: string;
 }
 
 const COLORS: Record<string, string> = {
@@ -22,7 +23,7 @@ const TIME_RANGES = [
   { label: '24h', minutes: 1440 },
 ];
 
-export default function EntityBreakdownPanel({ entityType, entityId, entityName }: Props) {
+export default function EntityBreakdownPanel({ entityType, entityId, entityName, toolName }: Props) {
   const [data, setData] = useState<any>(null);
   const [minutes, setMinutes] = useState(60);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -31,10 +32,12 @@ export default function EntityBreakdownPanel({ entityType, entityId, entityName 
   const mainColor = COLORS[entityType] || '#5cb878';
 
   useEffect(() => {
-    fetch(`/api/metrics/entity/${entityType}/${entityId}/breakdown?minutes=${minutes}`, {
+    let url = `/api/metrics/entity/${entityType}/${entityId}/breakdown?minutes=${minutes}`;
+    if (entityType === 'tool' && toolName) url += `&tool_name=${encodeURIComponent(toolName)}`;
+    fetch(url, {
       headers: { 'X-User-Id': uid() },
     }).then(r => r.json()).then(d => setData(d)).catch(() => setData(null));
-  }, [entityType, entityId, minutes]);
+  }, [entityType, entityId, minutes, toolName]);
 
   if (!data) return <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>加载中...</div>;
   if (data.total_tokens === 0 && data.total_calls === 0) return <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>暂无消耗数据</div>;
