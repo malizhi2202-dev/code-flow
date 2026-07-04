@@ -4,9 +4,10 @@
 
 ## 活跃 Change
 
-- **当前活跃 Change**：code-kit-monitor
-- **当前阶段**：4-dev（Wave 18 完成 · 全部 54 task ✅）
-- **当前 Task**：—（全部完成）
+- **当前活跃 Change**：—
+- **当前阶段**：—
+- **当前 Task**：—
+- **已归档**：`code-kit-monitor`（54 task ✅）、`agent-k8s-orchestration`（20 task ✅）
 
 ## 中断任务
 
