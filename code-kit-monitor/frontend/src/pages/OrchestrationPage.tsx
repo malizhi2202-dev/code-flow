@@ -41,7 +41,6 @@ export default function OrchestrationPage() {
   } = store;
 
   const [showYaml, setShowYaml] = useState(true); // true=yaml, false=md
-  const [splitRatio, setSplitRatio] = useState(30); // 默认YAML占30%，画布占70%
   const [applyResult, setApplyResult] = useState<any>(null);
   const [validateResult, setValidateResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -234,8 +233,8 @@ export default function OrchestrationPage() {
           placeholder="编排名称"
         />
         <div style={{ flex: 1 }} />
-        <button onClick={handleToggleMode} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11 }}>
-          {showYaml ? <><FileText size={12} /> MD</> : <><FileCode size={12} /> YAML</>}
+        <button onClick={() => setShowYaml(!showYaml)} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', background: showYaml ? 'var(--blue-bg)' : 'var(--bg-card)', border: `1px solid ${showYaml ? 'var(--blue)' : 'var(--border)'}`, borderRadius: 'var(--r-sm)', color: showYaml ? 'var(--blue)' : 'var(--text-secondary)', cursor: 'pointer', fontSize: 11 }}>
+          <FileCode size={12} /> YAML
         </button>
         <button className="btn" onClick={handleValidate} disabled={loading} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11 }}>
           <Eye size={12} /> Validate
@@ -245,7 +244,7 @@ export default function OrchestrationPage() {
         </button>
       </div>
 
-      {/* Main area */}
+      {/* Main area — Dify 风格: NodePool + Canvas 全宽 + 底部YAML抽屉 */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* NodePool sidebar */}
         <AgentNodePool
@@ -255,63 +254,19 @@ export default function OrchestrationPage() {
           onAddAgent={() => window.open('/agents/new', '_blank')}
         />
 
-        {/* YAML/MD Panel */}
-        <div style={{ width: `${splitRatio}%`, minWidth: 250, padding: 12, borderRight: '1px solid var(--border)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 6, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            {showYaml ? '📝 YAML 配置' : '📄 Markdown'}
-          </div>
-          <div style={{ flex: 1 }}>
-            {showYaml ? (
-              <YamlEditor value={yamlContent} onChange={setYamlContent} minHeight="100%" />
-            ) : (
-              <textarea
-                value={yamlContent}
-                onChange={(e) => setYamlContent(e.target.value)}
-                style={{ width: '100%', height: '100%', background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 8, fontSize: 11, fontFamily: "'JetBrains Mono', monospace", resize: 'none', boxSizing: 'border-box' }}
-              />
-            )}
-          </div>
-          {validateResult && (
-            <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 'var(--r-sm)', background: validateResult.valid ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${validateResult.valid ? '#5cb878' : '#e05555'}`, fontSize: 10, color: validateResult.valid ? '#5cb878' : '#e05555' }}>
-              {validateResult.valid ? '✅ 校验通过' : `❌ ${validateResult.errors?.[0]?.message || '校验失败'}`}
-            </div>
-          )}
-          {applyResult && (
-            <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 'var(--r-sm)', background: applyResult.ok ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${applyResult.ok ? '#5cb878' : '#e05555'}`, fontSize: 10, color: applyResult.ok ? '#5cb878' : '#e05555' }}>
-              {applyResult.ok ? `✅ 部署成功 — ID: ${applyResult.orchestration_id}` : `❌ ${applyResult.detail || '部署失败'}`}
-            </div>
-          )}
-        </div>
-
-        {/* Resizer */}
-        <div style={{ width: 4, cursor: 'col-resize', background: 'var(--border)', flexShrink: 0 }}
-          onMouseDown={(e) => {
-            const startX = e.clientX;
-            const startRatio = splitRatio;
-            const onMove = (ev: MouseEvent) => {
-              const containerWidth = (e.target as HTMLElement).parentElement?.offsetWidth || window.innerWidth;
-              setSplitRatio(Math.max(20, Math.min(70, startRatio + ((ev.clientX - startX) / containerWidth) * 100)));
-            };
-            const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp);
-          }}
-        />
-
-        {/* Canvas */}
-        <div style={{ flex: 1, padding: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-          <div style={{ flex: 1 }}>
-            <OrchestrationCanvas
-              nodes={topologyState.nodes}
-              edges={topologyState.edges}
-              onNodesChange={handleNodesChange}
-              onEdgesChange={handleEdgesChange}
-              onConnect={handleConnect}
-              onEdgeClick={handleEdgeClick}
-              onNodeDetailClick={handleNodeDetailClick}
-              onDrop={handleDrop}
-            />
-          </div>
+        {/* Canvas — 占满剩余宽度 */}
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <OrchestrationCanvas
+            nodes={topologyState.nodes}
+            edges={topologyState.edges}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={handleConnect}
+            onEdgeClick={handleEdgeClick}
+            onNodeDetailClick={handleNodeDetailClick}
+            onDrop={handleDrop}
+          />
+          {/* EdgeEditor 右侧滑出 */}
           {selectedEdgeId && selectedEdgeObj && (
             <EdgeEditor
               edgeId={selectedEdgeId}
@@ -324,10 +279,47 @@ export default function OrchestrationPage() {
               agentNames={agentNames}
             />
           )}
-          {activeOrchId && (
-            <div style={{ marginTop: 6 }}>
-              <TopologyMonitor instanceId={activeOrchId} collapsed />
+          {/* 结果提示浮层 */}
+          {(validateResult || applyResult) && (
+            <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {validateResult && (
+                <div style={{ padding: '6px 12px', borderRadius: 'var(--r-sm)', background: validateResult.valid ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${validateResult.valid ? '#5cb878' : '#e05555'}`, fontSize: 10, color: validateResult.valid ? '#5cb878' : '#e05555' }}>
+                  {validateResult.valid ? '✅ 校验通过' : `❌ ${validateResult.errors?.[0]?.message || '校验失败'}`}
+                </div>
+              )}
+              {applyResult && (
+                <div style={{ padding: '6px 12px', borderRadius: 'var(--r-sm)', background: applyResult.ok ? 'var(--green-bg)' : 'var(--red-bg)', border: `1px solid ${applyResult.ok ? '#5cb878' : '#e05555'}`, fontSize: 10, color: applyResult.ok ? '#5cb878' : '#e05555' }}>
+                  {applyResult.ok ? `✅ 部署成功 — ID: ${applyResult.orchestration_id}` : `❌ ${applyResult.detail || '部署失败'}`}
+                </div>
+              )}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom YAML/MD 抽屉 — Dify 风格，点击顶栏按钮展开 */}
+      <div style={{
+        height: showYaml ? 240 : 0,
+        overflow: showYaml ? 'auto' : 'hidden',
+        transition: 'height 200ms var(--ease)',
+        borderTop: showYaml ? '1px solid var(--border)' : 'none',
+        background: 'var(--bg-card)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 12px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>📝 YAML 配置</span>
+            <button onClick={handleToggleMode} style={{ fontSize: 9, padding: '1px 6px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              {showYaml ? 'MD' : 'YAML'}
+            </button>
+          </div>
+          <button onClick={() => setShowYaml(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+        </div>
+        <div style={{ height: 200, padding: 8 }}>
+          {showYaml ? (
+            <YamlEditor value={yamlContent} onChange={setYamlContent} minHeight="100%" />
+          ) : (
+            <textarea value={yamlContent} onChange={(e) => setYamlContent(e.target.value)}
+              style={{ width: '100%', height: '100%', background: 'var(--bg-input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: 8, fontSize: 11, fontFamily: "'JetBrains Mono', monospace", resize: 'none', boxSizing: 'border-box' }} />
           )}
         </div>
       </div>
