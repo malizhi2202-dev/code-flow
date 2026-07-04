@@ -12,3 +12,10 @@ from models.agent import Agent  # noqa: E402, F401
 from models.metrics import MetricRaw  # noqa: E402, F401
 from models.project import Project  # noqa: E402, F401
 from models.role_custom import CustomRole  # noqa: E402, F401
+from models.orchestration import (  # noqa: E402, F401
+    OrchestrationInstance,
+    TopologySnapshot,
+    OrchestrationTemplate,
+    SchedulingQueue,
+    TraceSpan,
+)
