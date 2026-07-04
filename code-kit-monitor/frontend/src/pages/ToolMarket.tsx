@@ -81,7 +81,7 @@ export default function ToolMarket({ onSelect }: Props) {
                 <div style={{ display: 'flex', gap: 12, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
                   <span>软: {tool.token_soft_limit?.toLocaleString()}</span>
                   <span>硬: {tool.token_hard_limit?.toLocaleString()}</span>
-                  <span>权限: {(tool.permissions || []).join(', ') || 'read'}</span>
+                  <span>权限: {(function(p: any) { if (Array.isArray(p)) return p.join(', '); try { return JSON.parse(p || '[]').join(', '); } catch(e) { return 'read'; } })(tool.permissions)}</span>
                 </div>
                 {toolStats[tool.name] && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '6px 8px', background: 'var(--bg-input)', borderRadius: 4 }}>
