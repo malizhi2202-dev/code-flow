@@ -20,12 +20,22 @@ export default function ToolDetail({ tool, onBack, onSave, onDelete }: {
   var [newPerm, setNewPerm] = useState('');
   var [showPreview, setShowPreview] = useState(true);
 
-  useEffect(function() { if (tool) setData(tool); }, [tool]);
+  useEffect(function() {
+    if (tool) {
+      var t = Object.assign({}, tool);
+      if (typeof t.permissions === 'string') {
+        try { t.permissions = JSON.parse(t.permissions); } catch(e) { t.permissions = ['read']; }
+      }
+      if (!Array.isArray(t.permissions)) t.permissions = ['read'];
+      setData(t);
+    }
+  }, [tool]);
 
   var handleSave = function() { onSave(data); setSaved(true); setTimeout(function() { setSaved(false); }, 1500); };
 
+  var fmtPerms = function(p: any) { if (Array.isArray(p)) return p.join(', '); try { return JSON.parse(p || '[]').join(', '); } catch(e) { return 'read'; } };
   var isNew = !tool || !tool.id;
-  var defaultMd = '# ' + (data.name || '工具名称') + '\n\n**类型**: ' + data.type + '\n**描述**: ' + (data.description || '') + '\n\n## 配置\n- token软限制: ' + data.token_soft_limit + '\n- token硬限制: ' + data.token_hard_limit + '\n- 权限: ' + (data.permissions || []).join(', ') + '\n\n## 接口定义\n\n```json\n{\n  \n}\n```\n';
+  var defaultMd = '# ' + (data.name || '工具名称') + '\n\n**类型**: ' + data.type + '\n**描述**: ' + (data.description || '') + '\n\n## 配置\n- token软限制: ' + data.token_soft_limit + '\n- token硬限制: ' + data.token_hard_limit + '\n- 权限: ' + fmtPerms(data.permissions) + '\n\n## 接口定义\n\n```json\n{\n  \n}\n```\n';
   var mdContent = data.content_md || defaultMd;
 
   // 简易 Markdown 预览
@@ -114,13 +124,13 @@ export default function ToolDetail({ tool, onBack, onSave, onDelete }: {
           <div>
             <label style={lbl}>权限</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-              {(data.permissions || []).map(function(p, i) {
-                return <span key={i} style={{ padding: '3px 8px', background: 'var(--blue-bg)', color: 'var(--blue)', borderRadius: 3, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>{p} <X size={10} style={{ cursor: 'pointer' }} onClick={function() { var arr = data.permissions.slice(); arr.splice(i, 1); setData(Object.assign({}, data, { permissions: arr })); }} /></span>;
+              {(Array.isArray(data.permissions) ? data.permissions : []).map(function(p, i) {
+                return <span key={i} style={{ padding: '3px 8px', background: 'var(--blue-bg)', color: 'var(--blue)', borderRadius: 3, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>{p} <X size={10} style={{ cursor: 'pointer' }} onClick={function() { var perms = Array.isArray(data.permissions) ? data.permissions.slice() : []; perms.splice(i, 1); setData(Object.assign({}, data, { permissions: perms })); }} /></span>;
               })}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <input value={newPerm} onChange={function(e) { setNewPerm(e.target.value); }} onKeyDown={function(e) { if (e.key === 'Enter') { setData(Object.assign({}, data, { permissions: data.permissions.concat([newPerm]) })); setNewPerm(''); } }} style={{ ...inp, flex: 1 }} placeholder="例: read, write, execute" />
-              <button onClick={function() { if (newPerm.trim()) { setData(Object.assign({}, data, { permissions: data.permissions.concat([newPerm.trim()]) })); setNewPerm(''); } }} style={{ padding: '8px 12px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }}><Plus size={12} /></button>
+              <input value={newPerm} onChange={function(e) { setNewPerm(e.target.value); }} onKeyDown={function(e) { if (e.key === 'Enter') { var arr = Array.isArray(data.permissions) ? data.permissions.slice() : []; setData(Object.assign({}, data, { permissions: arr.concat([newPerm]) })); setNewPerm(''); } }} style={{ ...inp, flex: 1 }} placeholder="例: read, write, execute" />
+              <button onClick={function() { if (newPerm.trim()) { var arr = Array.isArray(data.permissions) ? data.permissions.slice() : []; setData(Object.assign({}, data, { permissions: arr.concat([newPerm.trim()]) })); setNewPerm(''); } }} style={{ padding: '8px 12px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }}><Plus size={12} /></button>
             </div>
           </div>
 
