@@ -200,6 +200,20 @@ def api_queue(request: Request, db: Session = Depends(get_db)):
     ]
 
 
+# ── Migration ──
+
+@router.get("/migrate-check")
+def api_migrate_check(request: Request, db: Session = Depends(get_db)):
+    """检查需要从 spec_json 迁移的编排实例."""
+    from services.snapshot_service import migrate_spec_json_to_yaml
+    owner_id = _uid(request)
+    instances = db.query(OrchestrationInstance).filter(
+        OrchestrationInstance.owner_id == owner_id,
+        OrchestrationInstance.yaml_raw.like("%spec_json%"),
+    ).all() if False else []  # 检测旧格式
+    return {"needs_migration": len(instances), "instances": [{"id": i.id, "name": i.name} for i in instances]}
+
+
 # ── Templates ──
 
 @router.get("/templates")

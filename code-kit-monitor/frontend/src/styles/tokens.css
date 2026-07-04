@@ -56,6 +56,12 @@
   /* 动效 */
   --ease: cubic-bezier(0.16, 0, 0.2, 1);
   --fast: 100ms; --normal: 200ms;
+
+  /* 拓扑画布 */
+  --bg-canvas: #0b0c10;
+  --node-glow-healthy: 0 0 6px rgba(92,184,120,0.3);
+  --node-glow-failed: 0 0 8px rgba(224,85,85,0.4);
+  --grid-dot: rgba(255,255,255,0.03);
 }
 
 /* ── 全局 ── */
@@ -81,6 +87,7 @@ body {
 @keyframes pulse-red { 0%,100%{box-shadow:0 0 0 0 rgba(224,85,85,0.3)} 50%{box-shadow:0 0 0 6px rgba(224,85,85,0)} }
 @keyframes spin { to{transform:rotate(360deg)} }
 @keyframes slide-in { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+@keyframes dash-flow { to{stroke-dashoffset:-24} }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }

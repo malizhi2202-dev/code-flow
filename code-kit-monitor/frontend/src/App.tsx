@@ -21,6 +21,7 @@ import RoleDetail from './pages/RoleDetail';
 import AgentBuilder from './pages/AgentBuilder';
 import AgentDetail from './pages/AgentDetail';
 import OrchestrationPage from './pages/OrchestrationPage';
+import TemplateMarket from './pages/TemplateMarket';
 import MonitoringDashboard from './pages/MonitoringDashboard';
 import ProjectManager from './pages/ProjectManager';
 import ProjectDetail from './pages/ProjectDetail';
@@ -71,6 +72,7 @@ type View =
   | { page: 'projects' }
   | { page: 'users' }
   | { page: 'audit' }
+  | { page: 'templates' }
   | { page: 'profile' };
 
 export default function App() {
@@ -187,6 +189,7 @@ export default function App() {
       case 'roles-page': return perm('project:read') ? <RoleMarket onSelectRole={(r) => setRoleDetail(r)} /> : <EmptyPerm />;
       case 'agents': return perm('project:read') ? <AgentBuilder onSelect={(a) => setAgentDetail(a)} /> : <EmptyPerm />;
       case 'orchestration': return perm('project:write') ? <OrchestrationPage /> : <EmptyPerm />;
+      case 'templates': return perm('project:read') ? <TemplateMarket /> : <EmptyPerm />;
       case 'monitor': return perm('project:read') ? <MonitoringDashboard /> : <EmptyPerm />;
       case 'projects': return perm('project:read') ? <ProjectManager onSelect={(id) => setProjectDetailId(id)} /> : <EmptyPerm />;
       case 'profile': return <UserCenter onBack={() => navigate('projects')} />;
