@@ -1,5 +1,6 @@
 /** 编排画布 v2: YAML ↔ 画布 双向同步 + MD 转换工具函数. */
 import type { Node, Edge } from '@xyflow/react';
+import * as jsyaml from 'js-yaml';
 
 // ═══════════════════════════════════════════
 // Types
@@ -327,9 +328,7 @@ export function mdToYaml(mdText: string): string {
 
 function parseYamlSafe(text: string): Record<string, any> | null {
   try {
-    const jsyaml = (window as any).jsyaml;
-    if (jsyaml?.load) return jsyaml.load(text);
-    return null;
+    return jsyaml.load(text) as Record<string, any> | null;
   } catch {
     return null;
   }
@@ -337,11 +336,8 @@ function parseYamlSafe(text: string): Record<string, any> | null {
 
 function dumpYamlSafe(obj: Record<string, any>): string {
   try {
-    const jsyaml = (window as any).jsyaml;
-    if (jsyaml?.dump) return jsyaml.dump(obj, { indent: 2 });
-  } catch {
-    // js-yaml not available, use fallback
-  }
+    return jsyaml.dump(obj, { indent: 2 });
+  } catch {}
   // fallback: simple YAML dump
   let y = '';
   y += `apiVersion: ${obj.apiVersion || 'ai-platform/v1'}\n`;
