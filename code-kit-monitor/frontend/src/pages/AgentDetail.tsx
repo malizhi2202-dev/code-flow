@@ -8,8 +8,8 @@ var inp: React.CSSProperties = { width: '100%', padding: '8px', background: 'var
 var th: React.CSSProperties = { padding: '6px 8px', textAlign: 'left', color: 'var(--text-dim)', fontWeight: 500, fontSize: 10, whiteSpace: 'nowrap' };
 var td: React.CSSProperties = { padding: '4px 8px', fontSize: 11, color: 'var(--color-text)', whiteSpace: 'nowrap' };
 
-export default function AgentDetail({ agent, onBack, onSave, onDelete }: {
-  agent: any; onBack: () => void; onSave: (data: any) => void; onDelete?: () => void;
+export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError }: {
+  agent: any; onBack: () => void; onSave: (data: any) => void; onDelete?: () => void; saveError?: string | null;
 }) {
   var isNew = !agent || !agent.id;
   var [data, setData] = useState<any>(Object.assign({
@@ -314,6 +314,11 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete }: {
             <ChannelConfigComponent agentId={agent.id} />
           </div>
 
+          {saveError && (
+            <div style={{ padding: '10px 14px', background: 'var(--red-bg, #dc262620)', border: '1px solid var(--color-danger, #dc2626)', borderRadius: 6, color: 'var(--color-danger, #dc2626)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>❌</span> {saveError}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={handleSave} style={{ padding: '10px 24px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}><Save size={14} /> 保存</button>
             {onDelete && <button onClick={onDelete} style={{ padding: '10px 16px', background: 'none', color: 'var(--color-danger)', border: '1px solid var(--color-danger)', borderRadius: 4, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Trash2 size={14} /> 删除</button>}

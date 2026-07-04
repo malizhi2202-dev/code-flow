@@ -95,6 +95,7 @@ export default function App() {
   const [roleDetail, setRoleDetail] = useState<any>(null);
   const [toolDetail, setToolDetail] = useState<any>(null);
   const [agentDetail, setAgentDetail] = useState<any>(null);
+  const [agentSaveError, setAgentSaveError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const { isAdmin, rolePermissions, fetchMe, fetchUsers, loaded } = useAuth();
 
@@ -130,18 +131,23 @@ export default function App() {
 
   const renderContent = () => {
     if (agentDetail) {
-      var handleSaveAgent = function(data: any) {
+      var handleSaveAgent = async function(data: any) {
         var uid = localStorage.getItem('current_user_id') || 'admin';
-        if (data.id) {
-          fetch('/api/agents/' + data.id, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid }, body: JSON.stringify(data) }).then(function() { setAgentDetail(null); });
-        } else {
-          fetch('/api/agents', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid }, body: JSON.stringify(data) }).then(function() { setAgentDetail(null); });
+        setAgentSaveError(null);
+        var url = data.id ? '/api/agents/' + data.id : '/api/agents';
+        var method = data.id ? 'PUT' : 'POST';
+        var res = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json', 'X-User-Id': uid }, body: JSON.stringify(data) });
+        if (!res.ok) {
+          var err = await res.json().catch(function() { return { detail: '保存失败 (' + res.status + ')' }; });
+          setAgentSaveError(err.detail || '保存失败');
+          return;
         }
+        setAgentDetail(null);
       };
       var handleDeleteAgent = function() {
         if (agentDetail.id) { fetch('/api/agents/' + agentDetail.id, { method: 'DELETE', headers: { 'X-User-Id': localStorage.getItem('current_user_id') || 'admin' } }).then(function() { setAgentDetail(null); }); }
       };
-      return <AgentDetail agent={agentDetail} onBack={() => setAgentDetail(null)} onSave={handleSaveAgent} onDelete={agentDetail.id ? handleDeleteAgent : undefined} />;
+      return <AgentDetail agent={agentDetail} onBack={() => { setAgentDetail(null); setAgentSaveError(null); }} onSave={handleSaveAgent} onDelete={agentDetail.id ? handleDeleteAgent : undefined} saveError={agentSaveError} />;
     }
     if (toolDetail) {
       var handleSaveTool = function(data: any) {
