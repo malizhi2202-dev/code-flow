@@ -14,9 +14,7 @@ export default function ProjectDetail({ projectId, onBack }: Props) {
   const { workflows, fetchWorkflows } = useWorkflows();
   const { data: metrics, fetchMetrics } = useMetrics();
 
-  const [tab, setTab] = useState<'overview' | 'monitor' | 'history'>('overview');
-  const [bindAgent, setBindAgent] = useState<number>(0);
-  const [bindWorkflow, setBindWorkflow] = useState<number>(0);
+  const [tab, setTab] = useState<'overview' | 'chat' | 'monitor' | 'history'>('overview');
 
   // 项目对话
   const [chatMessages, setChatMessages] = useState<any[]>([]);
@@ -55,7 +53,6 @@ export default function ProjectDetail({ projectId, onBack }: Props) {
   if (!project) return <div style={{ padding: 40, color: 'var(--text-weak)' }}>加载中...</div>;
 
   const boundAgent = agents.find(a => a.id === project.agent_id);
-  const boundWorkflow = workflows.find(w => w.id === project.workflow_id);
 
   return (
     <div style={{ padding: 24, height: '100%', overflow: 'auto' }}>
@@ -69,11 +66,11 @@ export default function ProjectDetail({ projectId, onBack }: Props) {
         {project.status === 'running' && <button onClick={() => stopProject(project.id)} style={btnDanger}><Square size={12} /> 停止</button>}
       </div>
 
-      {/* Tab 导航——项目维度全部模块 */}
+      {/* Tab 导航 */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border-normal, #2a2d35)', overflowX: 'auto' }}>
-        {(['overview','chat','tools','workflows','roles','agent','security','monitor','history'] as const).map(t => (
+        {(['overview','chat','monitor','history'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 14px', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent', color: tab === t ? 'var(--color-primary)' : 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 12, fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
-            {t === 'overview' ? '📋 概览' : t === 'chat' ? '💬 对话' : t === 'tools' ? '🔧 工具' : t === 'workflows' ? '🔀 工作流' : t === 'roles' ? '👥 角色' : t === 'agent' ? '🤖 Agent' : t === 'security' ? '🛡️ 安全' : t === 'monitor' ? '📊 监控' : '📜 历史'}
+            {t === 'overview' ? '📋 概览' : t === 'chat' ? '💬 对话' : t === 'monitor' ? '📊 监控' : '📜 历史'}
           </button>
         ))}
       </div>
@@ -89,41 +86,40 @@ export default function ProjectDetail({ projectId, onBack }: Props) {
             </div>
           </div>
 
-          {/* 绑定 Agent */}
+          {/* 绑定 Agent（创建时已选定，此处只读展示） */}
           <div style={{ background: 'var(--bg-card, #181a1f)', borderRadius: 8, padding: 16, border: '1px solid var(--border-normal, #2a2d35)' }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 6 }}><Bot size={14} /> 绑定 Agent</h3>
+            <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: 6 }}><Bot size={14} /> 绑定 Agent</h3>
             {boundAgent ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--color-text)' }}>{boundAgent.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>{boundAgent.model_name} · {boundAgent.runtime} · token: {boundAgent.token_hard_limit?.toLocaleString()}</div>
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <Bot size={16} color="var(--color-primary)" />
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--color-text)' }}>{boundAgent.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>{boundAgent.model_name} · {boundAgent.runtime} · token 上限: {(boundAgent.token_hard_limit || 0).toLocaleString()}</div>
+                  </div>
                 </div>
-                <button onClick={() => setBindAgent(0)} style={{ padding: '4px 8px', fontSize: 11, background: 'var(--bg-input, #0b0c10)', color: 'var(--color-text-secondary)', border: '1px solid var(--border-normal, #2a2d35)', borderRadius: 4, cursor: 'pointer' }}>更换</button>
-              </div>
-            ) : (
-              <select value={bindAgent} onChange={e => { const v = +e.target.value; setBindAgent(v); if (v) fetch(`/api/projects/${project.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-User-Id': localStorage.getItem('current_user_id') || 'admin' }, body: JSON.stringify({ agent_id: v }) }).then(() => fetchProjects()); }} style={inp}>
-                <option value={0}>-- 选择已有 Agent --</option>
-                {agents.filter(a => a.status === 'standby').map(a => <option key={a.id} value={a.id}>{a.name} ({a.model_name})</option>)}
-              </select>
-            )}
-          </div>
 
-          {/* 绑定工作流 */}
-          <div style={{ background: 'var(--bg-card, #181a1f)', borderRadius: 8, padding: 16, border: '1px solid var(--border-normal, #2a2d35)' }}>
-            <h3 style={{ fontSize: 13, fontWeight: 600, margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: 6 }}><GitBranch size={14} /> 绑定工作流</h3>
-            {boundWorkflow ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--color-text)' }}>{boundWorkflow.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-dim)' }}>{boundWorkflow.status} · {(boundWorkflow.spec_json?.nodes || []).length} 节点 · {boundWorkflow.definition_mode === 'visual' ? '可视化' : '文本'}</div>
+                {/* Agent 绑定的工作流（只读） */}
+                <div style={{ borderTop: '1px solid var(--border-normal, #2a2d35)', paddingTop: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}><GitBranch size={12} /> 工作流</div>
+                  {(() => {
+                    const wfIds: number[] = boundAgent.workflow_ids || (boundAgent.workflow_id ? [boundAgent.workflow_id] : []);
+                    const wfs = wfIds.map((id: number) => workflows.find(w => w.id === id)).filter(Boolean);
+                    return wfs.length > 0 ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {wfs.map((wf: any) => (
+                          <span key={wf.id} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, background: 'var(--bg-input)', border: '1px solid var(--border-normal, #2a2d35)', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <GitBranch size={11} /> {wf.name}
+                            <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{(wf.spec_json?.nodes || []).length} 节点</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>未绑定工作流</span>;
+                  })()}
                 </div>
-                <button onClick={() => setBindWorkflow(0)} style={{ padding: '4px 8px', fontSize: 11, background: 'var(--bg-input, #0b0c10)', color: 'var(--color-text-secondary)', border: '1px solid var(--border-normal, #2a2d35)', borderRadius: 4, cursor: 'pointer' }}>更换</button>
-              </div>
+              </>
             ) : (
-              <select value={bindWorkflow} onChange={e => { const v = +e.target.value; setBindWorkflow(v); if (v) fetch(`/api/projects/${project.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-User-Id': localStorage.getItem('current_user_id') || 'admin' }, body: JSON.stringify({ workflow_id: v }) }).then(() => fetchProjects()); }} style={inp}>
-                <option value={0}>-- 选择已有工作流 --</option>
-                {workflows.filter(w => w.status === 'published').map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', textAlign: 'center', padding: 12 }}>创建项目时未选择 Agent · <a href="#" onClick={(e) => { e.preventDefault(); onBack(); }} style={{ color: 'var(--color-primary)' }}>返回列表重新创建</a></div>
             )}
           </div>
 
