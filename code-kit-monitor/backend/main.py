@@ -25,6 +25,7 @@ from routes.metrics_api import router as metrics_router
 from routes.projects_api import router as projects_router
 from routes.roles_custom_api import router as roles_custom_router
 from routes.assembly_api import router as assembly_router
+from routes.agent_knowledge_api import router as agent_knowledge_router
 
 
 @asynccontextmanager
@@ -95,6 +96,7 @@ app.include_router(orchestration_router)
 app.include_router(metrics_router)
 app.include_router(projects_router)
 app.include_router(roles_custom_router)
+app.include_router(agent_knowledge_router)
 app.include_router(assembly_router)
 
 
