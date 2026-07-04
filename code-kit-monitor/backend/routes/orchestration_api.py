@@ -135,53 +135,6 @@ def api_list(request: Request, db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/{instance_id}")
-def api_detail(instance_id: int, request: Request, db: Session = Depends(get_db)):
-    """编排实例详情 + 拓扑快照."""
-    inst = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == instance_id).first()
-    if not inst:
-        raise HTTPException(status_code=404, detail="编排实例不存在")
-
-    snapshot = db.query(TopologySnapshot).filter(
-        TopologySnapshot.instance_id == instance_id
-    ).order_by(TopologySnapshot.created_at.desc()).first()
-
-    return {
-        "id": inst.id, "name": inst.name, "status": inst.status,
-        "transition_status": inst.transition_status,
-        "yaml_raw": inst.yaml_raw,
-        "agent_ids": inst.agent_ids,
-        "priority": inst.priority,
-        "token_soft_limit": inst.token_soft_limit,
-        "token_hard_limit": inst.token_hard_limit,
-        "max_retries": inst.max_retries,
-        "retry_backoff": inst.retry_backoff,
-        "on_failure": inst.on_failure,
-        "snapshot": {
-            "node_count": snapshot.node_count if snapshot else 0,
-            "edge_count": snapshot.edge_count if snapshot else 0,
-            "created_at": snapshot.created_at.isoformat() if snapshot else None,
-        } if snapshot else None,
-        "created_at": inst.created_at.isoformat(),
-        "updated_at": inst.updated_at.isoformat(),
-    }
-
-
-@router.delete("/{instance_id}")
-def api_delete(instance_id: int, request: Request, db: Session = Depends(get_db)):
-    """删除编排实例（running 状态不可删）."""
-    inst = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == instance_id).first()
-    if not inst:
-        raise HTTPException(status_code=404, detail="编排实例不存在")
-    if inst.status == "running":
-        raise HTTPException(status_code=400, detail="运行中的编排实例不可删除，请先停止")
-
-    log_audit(_uid(request), _user(request).get("name", ""), "orchestration.delete", str(instance_id), "orchestration", f"delete '{inst.name}'", "127.0.0.1")
-    db.delete(inst)
-    db.commit()
-    return {"ok": True}
-
-
 # ── Queue ──
 
 @router.get("/queue/list")
@@ -271,3 +224,50 @@ def api_deploy_template(template_id: int, payload: dict, request: Request, db: S
 
     log_audit(_uid(request), _user(request).get("name", ""), "orchestration.apply", f"tpl:{template_id}", "template", f"deploy '{tpl.name}'", "127.0.0.1")
     return result
+@router.get("/{instance_id}")
+def api_detail(instance_id: int, request: Request, db: Session = Depends(get_db)):
+    """编排实例详情 + 拓扑快照."""
+    inst = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == instance_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="编排实例不存在")
+
+    snapshot = db.query(TopologySnapshot).filter(
+        TopologySnapshot.instance_id == instance_id
+    ).order_by(TopologySnapshot.created_at.desc()).first()
+
+    return {
+        "id": inst.id, "name": inst.name, "status": inst.status,
+        "transition_status": inst.transition_status,
+        "yaml_raw": inst.yaml_raw,
+        "agent_ids": inst.agent_ids,
+        "priority": inst.priority,
+        "token_soft_limit": inst.token_soft_limit,
+        "token_hard_limit": inst.token_hard_limit,
+        "max_retries": inst.max_retries,
+        "retry_backoff": inst.retry_backoff,
+        "on_failure": inst.on_failure,
+        "snapshot": {
+            "node_count": snapshot.node_count if snapshot else 0,
+            "edge_count": snapshot.edge_count if snapshot else 0,
+            "created_at": snapshot.created_at.isoformat() if snapshot else None,
+        } if snapshot else None,
+        "created_at": inst.created_at.isoformat(),
+        "updated_at": inst.updated_at.isoformat(),
+    }
+
+
+@router.delete("/{instance_id}")
+def api_delete(instance_id: int, request: Request, db: Session = Depends(get_db)):
+    """删除编排实例（running 状态不可删）."""
+    inst = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == instance_id).first()
+    if not inst:
+        raise HTTPException(status_code=404, detail="编排实例不存在")
+    if inst.status == "running":
+        raise HTTPException(status_code=400, detail="运行中的编排实例不可删除，请先停止")
+
+    log_audit(_uid(request), _user(request).get("name", ""), "orchestration.delete", str(instance_id), "orchestration", f"delete '{inst.name}'", "127.0.0.1")
+    db.delete(inst)
+    db.commit()
+    return {"ok": True}
+
+

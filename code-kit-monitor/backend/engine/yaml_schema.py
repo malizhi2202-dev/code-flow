@@ -141,19 +141,21 @@ def _check_dag(agents: list[dict], routes: list[dict]) -> list[dict]:
         color[node] = BLACK
         return False
 
-    for n in agent_names:
-        if color[n] == WHITE and has_cycle(n):
-            errors.append({"line": 0, "field": "spec.routes", "message": "拓扑存在循环引用，必须为 DAG"})
-            break
+    if len(agent_names) > 1:
+        for n in agent_names:
+            if color[n] == WHITE and has_cycle(n):
+                errors.append({"line": 0, "field": "spec.routes", "message": "拓扑存在循环引用，必须为 DAG"})
+                break
 
-    # 检测孤立节点
+    # 检测孤立节点（单节点允许无路由）
     referenced = set()
     for route in routes:
         referenced.add(route.get("from", ""))
         referenced.add(route.get("to", ""))
-    for n in agent_names:
-        if n not in referenced:
-            errors.append({"line": 0, "field": f"spec.agents[name={n}]", "message": f"Agent '{n}' 无任何连线引用（孤立节点）"})
+    if len(agent_names) > 1:
+        for n in agent_names:
+            if n not in referenced:
+                errors.append({"line": 0, "field": f"spec.agents[name={n}]", "message": f"Agent '{n}' 无任何连线引用（孤立节点）"})
 
     return errors
 
