@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Save, Plus, Trash2, ChevronUp, ChevronDown, BarChart3, GitMerge, ArrowRight, GitFork } from 'lucide-react';
 import { useWorkflows } from '../stores/workflows';
+import EntityMonitor from '../components/EntityMonitor';
 
 const th: React.CSSProperties = { padding: '6px 8px', textAlign: 'left', color: 'var(--text-dim)', fontWeight: 500, fontSize: 10 };
 const td: React.CSSProperties = { padding: '4px 8px', fontSize: 11, color: 'var(--color-text)' };
@@ -255,53 +256,7 @@ export default function WorkflowDetail({ workflowId, onBack }: { workflowId: num
       )}
 
       {tab === 'monitor' && (
-        <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 20, border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>📊 Token 消耗</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: '#548cf0' }}>{totalTokens.toLocaleString()}</div>
-              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>{totalCalls} 次调用</div>
-            </div>
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 20, border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>⏱ 平均执行时间</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: '#5cb878' }}>{(avgMs / 1000).toFixed(2)}s</div>
-              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>总 {(totalMs / 1000).toFixed(1)}s</div>
-            </div>
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 20, border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>🎯 工具命中数</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: '#e8a450' }}>{totalCalls.toLocaleString()}</div>
-            </div>
-            <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 20, border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>🔀 节点数</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, color: '#b47cd8' }}>{nodes.length}</div>
-            </div>
-          </div>
-          <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 16, border: '1px solid var(--border)' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px 0' }}>📜 执行审计日志（{monSessions.length} 条）</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                <thead><tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  <th style={th}>时间</th><th style={th}>模型</th><th style={th}>工具</th><th style={{ ...th, textAlign: 'right' }}>Token</th><th style={th}>耗时</th><th style={th}>状态</th>
-                </tr></thead>
-                <tbody>
-                  {monSessions.slice(0, 30).map(function(s, i) {
-                    return (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={td}>{s.timestamp ? s.timestamp.slice(11, 19) : '-'}</td>
-                        <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{s.model_name}</td>
-                        <td style={{ ...td, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.tool_name || '-'}</td>
-                        <td style={{ ...td, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>{s.total_tokens ? s.total_tokens.toLocaleString() : '0'}</td>
-                        <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{s.duration_ms ? (s.duration_ms / 1000).toFixed(1) + 's' : '-'}</td>
-                        <td style={td}><span style={{ padding: '2px 6px', borderRadius: 2, fontSize: 9, background: s.status === 'success' ? 'var(--green-bg)' : 'var(--red-bg)', color: s.status === 'success' ? 'var(--green)' : 'var(--red)' }}>{s.status === 'success' ? 'OK' : 'ERR'}</span></td>
-                      </tr>
-                    );
-                  })}
-                  {monSessions.length === 0 && <tr><td colSpan={6} style={{ padding: 30, textAlign: 'center', color: 'var(--text-dim)' }}>暂无数据</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <EntityMonitor entityType="workflow" entityId={workflowId} entityName={wf?.name || '工作流'} onClose={() => setTab('nodes')} />
       )}
     </div>
   );
