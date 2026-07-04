@@ -426,18 +426,17 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
             <>
               {orchInfo && (
                 <div style={panel}>
-                  <h3 style={sectionTitle}><Network size={14} color="#a855f7" style={{ marginRight: 6 }} />绑定编排组</h3>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{orchInfo.name}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
-                        {orchInfo.status} · {orchInfo.agent_count} Agents · 优先级 {orchInfo.priority}
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 3,
-                      background: orchInfo.status === 'converging' ? 'rgba(92,184,120,0.15)' : 'rgba(232,164,80,0.15)',
-                      color: orchInfo.status === 'converging' ? '#5cb878' : '#e8a450',
-                    }}>{orchInfo.status}</span>
+                    <h3 style={{ ...sectionTitle, margin: 0 }}>
+                      <Network size={14} color="#a855f7" style={{ marginRight: 6 }} />
+                      {orchInfo.name}
+                    </h3>
+                    <a href={`/orchestration/${project.orchestration_id}/edit`} style={{ padding: '6px 14px', fontSize: 11, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <ExternalLink size={12} /> 查看详情
+                    </a>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8 }}>
+                    {orchInfo.status} · {orchInfo.agent_count} Agents · 优先级 {orchInfo.priority}
                   </div>
                 </div>
               )}
