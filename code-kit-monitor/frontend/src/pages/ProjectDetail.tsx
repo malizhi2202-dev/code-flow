@@ -17,6 +17,10 @@ export default function ProjectDetail({ projectId, onBack }: Props) {
 
   const [tab, setTab] = useState<'overview' | 'chat' | 'agent' | 'monitor' | 'history'>('overview');
 
+  // 衍生：项目 + 绑定 Agent（提前计算，供 useEffect 使用）
+  const project = projects.find(p => p.id === projectId);
+  const boundAgent = project ? agents.find(a => a.id === project.agent_id) : undefined;
+
   // Agent tab: 消耗数据 + 会话
   const [breakdown, setBreakdown] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -71,10 +75,7 @@ export default function ProjectDetail({ projectId, onBack }: Props) {
     }).catch(() => { setChatLoading(false); setChatError('网络错误'); });
   };
 
-  const project = projects.find(p => p.id === projectId);
   if (!project) return <div style={{ padding: 40, color: 'var(--text-weak)' }}>加载中...</div>;
-
-  const boundAgent = agents.find(a => a.id === project.agent_id);
 
   return (
     <div style={{ padding: 24, height: '100%', overflow: 'auto' }}>
