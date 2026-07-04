@@ -199,7 +199,9 @@ export function topologyToYaml(
   edgeConfigs: Map<string, EdgeConfig>,
   name: string = 'my-orchestration',
 ): string {
-  const agents = nodes.map((node) => ({
+  const agents = nodes
+    .filter((node) => node.id !== 'start' && node.id !== 'end' && node.type !== 'startNode' && node.type !== 'endNode')
+    .map((node) => ({
     name: node.data.label || 'agent',
     kind: 'Agent',
     spec: {

@@ -128,7 +128,7 @@ function CanvasInner({
 
   useEffect(() => {
     if (nodes.length > 0) {
-      const t = setTimeout(() => fitView({ padding: 0.3, duration: 300 }), 400);
+      const t = setTimeout(() => fitView({ padding: 0.2, maxZoom: 1.5, duration: 200 }), 500);
       return () => clearTimeout(t);
     }
   }, [nodes.length, fitView]);
@@ -157,7 +157,7 @@ function CanvasInner({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.3 }}
+        fitViewOptions={{ padding: 0.2, maxZoom: 1.5 }}
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
         elementsSelectable={!readOnly}
