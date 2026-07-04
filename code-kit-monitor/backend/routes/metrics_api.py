@@ -142,6 +142,13 @@ def api_project_breakdown(project_id: int, minutes: int = 60, request: Request =
             info["avg_tokens"] = round(info["total_tokens"] / info["calls"])
         b = wf_buckets.get(eid, {})
         info["buckets"] = [{"ts": ts, "tokens": v} for ts, v in sorted(b.items())]
+        # 工作流内工具分拆
+        tool_rows = db.query(SessionMetric.tool_name, func.sum(SessionMetric.total_tokens).label('tokens'), func.count(SessionMetric.id).label('hits')).filter(
+            SessionMetric.entity_type == 'workflow', SessionMetric.entity_id == int(eid),
+            SessionMetric.owner_id == project.owner_id, SessionMetric.timestamp >= since,
+            SessionMetric.tool_name != '',
+        ).group_by(SessionMetric.tool_name).order_by(func.sum(SessionMetric.total_tokens).desc()).all()
+        info["tools"] = [{"name": r.tool_name, "tokens": int(r.tokens or 0), "hits": int(r.hits or 0)} for r in tool_rows]
 
     total_tokens = sum(i["total_tokens"] for i in list(agent_info.values()) + list(wf_info.values()))
     total_calls = sum(i["calls"] for i in list(agent_info.values()) + list(wf_info.values()))
