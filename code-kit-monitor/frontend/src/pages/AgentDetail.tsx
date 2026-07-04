@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Trash2, ShieldAlert, Plus, X, ChartBarIncreasing, RefreshCw, Database, Link2, Wifi, WifiOff } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, ShieldAlert, Plus, X, ChartBarIncreasing, RefreshCw, Database, Link2, Wifi, WifiOff, ExternalLink } from 'lucide-react';
+import ChatWindow from '../components/ChatWindow';
+import ChannelConfigComponent from '../components/ChannelConfig';
 
 var lbl: React.CSSProperties = { fontSize: 11, fontWeight: 500, color: 'var(--text-dim)', display: 'block', marginBottom: 4 };
 var inp: React.CSSProperties = { width: '100%', padding: '8px', background: 'var(--bg-input)', color: 'var(--color-text)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12, boxSizing: 'border-box' };
@@ -28,6 +30,11 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete }: {
   var [memoryChannels, setMemoryChannels] = useState<any>({});
   var [showMemForm, setShowMemForm] = useState(false);
   var [memForm, setMemForm] = useState<any>({ channel: 'web', key: '', value: '', memory_type: 'fact', priority: 5 });
+  // 对话
+  var [chatMessages, setChatMessages] = useState<any[]>([]);
+  var [chatLoading, setChatLoading] = useState(false);
+  var [chatError, setChatError] = useState<string | null>(null);
+  var [chatConversationId, setChatConversationId] = useState<number | null>(null);
 
   var uid = function() { return localStorage.getItem('current_user_id') || 'admin'; };
 
@@ -122,6 +129,27 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete }: {
         setKnowledgeSources(newList);
       });
   };
+  // 对话功能
+  var sendChatMessage = function(content: string) {
+    setChatLoading(true); setChatError(null);
+    var tempMsg = { id: Date.now(), role: 'user', content: content, status: 'done', created_at: new Date().toISOString() };
+    setChatMessages(function(prev: any[]) { return prev.concat([tempMsg]); });
+    fetch('/api/agents/' + agent.id + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-User-Id': uid() },
+      body: JSON.stringify({ content: content, conversation_id: chatConversationId }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.ok) {
+        setChatMessages(function(prev: any[]) { return prev.filter(function(m) { return m.id !== tempMsg.id; }).concat([d.user_message, d.agent_message]); });
+        setChatConversationId(d.conversation_id);
+        if (d.agent_message && d.agent_message.status === 'error') setChatError(d.agent_message.content);
+      } else {
+        setChatError(d.detail || '发送失败');
+      }
+      setChatLoading(false);
+    }).catch(function() { setChatLoading(false); setChatError('网络错误'); });
+  };
+
   var toggleWf = function(wfId: number) {
     var ids = (data.workflow_ids || []).slice();
     var idx = ids.indexOf(wfId);
@@ -148,7 +176,7 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete }: {
 
       {!isNew && (
         <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
-          {['edit', 'memory', 'monitor'].map(function(t) { return <button key={t} onClick={function() { setTab(t); }} style={{ padding: '8px 16px', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent', color: tab === t ? 'var(--color-primary)' : 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>{t === 'edit' ? '✏️ 编辑' : t === 'memory' ? '🧠 记忆' : '📊 监控'}</button>; })}
+          {['edit', 'memory', 'chat', 'monitor'].map(function(t) { return <button key={t} onClick={function() { setTab(t); }} style={{ padding: '8px 16px', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent', color: tab === t ? 'var(--color-primary)' : 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>{t === 'edit' ? '✏️ 编辑' : t === 'memory' ? '🧠 记忆' : t === 'chat' ? '💬 对话' : '📊 监控'}</button>; })}
         </div>
       )}
 
@@ -281,10 +309,35 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete }: {
             </div>
           </details>
 
+          {/* 渠道配置 */}
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 8 }}>
+            <ChannelConfigComponent agentId={agent.id} />
+          </div>
+
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={handleSave} style={{ padding: '10px 24px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}><Save size={14} /> 保存</button>
             {onDelete && <button onClick={onDelete} style={{ padding: '10px 16px', background: 'none', color: 'var(--color-danger)', border: '1px solid var(--color-danger)', borderRadius: 4, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Trash2 size={14} /> 删除</button>}
           </div>
+        </div>
+      )}
+
+      {tab === 'chat' && agent && agent.id && (
+        <div style={{ height: 'calc(100vh - 200px)', minHeight: 400 }}>
+          <ChatWindow
+            agentId={agent.id}
+            agentName={agent.name}
+            messages={chatMessages}
+            loading={chatLoading}
+            error={chatError}
+            onSend={function(content: string) { sendChatMessage(content); }}
+            onRetry={function() { setChatError(null); }}
+            extraHeader={
+              <button onClick={function() { setTab('edit'); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: 11, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                <ExternalLink size={12} /> 发布到渠道
+              </button>
+            }
+          />
         </div>
       )}
 
