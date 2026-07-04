@@ -81,7 +81,7 @@ export default function ConversationCenter() {
                 >
                   <Bot size={14} style={{ color: 'var(--text-dim)' }} />
                   {agent.name}
-                </span>
+                </div>
               ))}
               {filteredAgents.length === 0 && (
                 <div style={{ padding: 8, fontSize: 11, color: 'var(--text-dim)', textAlign: 'center' }}>
