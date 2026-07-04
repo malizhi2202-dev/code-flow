@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Trash2, Download, Eye, ShieldAlert, Plus, X } from 'lucide-react';
-import EntityBreakdownPanel from '../components/EntityBreakdownPanel';
 
 interface ToolData {
   id?: number; name: string; type: string; description: string;
@@ -144,13 +143,6 @@ export default function ToolDetail({ tool, onBack, onSave, onDelete }: {
             {onDelete && <button onClick={onDelete} style={{ padding: '10px 16px', background: 'none', color: 'var(--color-danger)', border: '1px solid var(--color-danger)', borderRadius: 4, cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}><Trash2 size={14} /> 删除</button>}
           </div>
 
-          {/* 工具监控 */}
-          {!isNew && (
-            <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 12px 0' }}>📊 工具消耗统计</h2>
-              <EntityBreakdownPanel entityType="tool" entityId={0} entityName={data.name} toolName={data.name} />
-            </div>
-          )}
         </div>
       </div>
     </div>

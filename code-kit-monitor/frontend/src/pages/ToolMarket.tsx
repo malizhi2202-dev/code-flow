@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Plus, Download, Trash2, Wrench, Zap, Link, Search, BarChart3, Upload } from 'lucide-react';
+import { Plus, Download, Trash2, Wrench, Zap, Link, Search, BarChart3, Upload, TrendingUp } from 'lucide-react';
+import { BarChart, Bar, ResponsiveContainer, Tooltip as ReTooltip } from 'recharts';
 import { useTools, Tool } from '../stores/tools';
 import ConfirmDialog from '../components/ConfirmDialog';
-import EntityMonitor from '../components/EntityMonitor';
+import EntityBreakdownPanel from '../components/EntityBreakdownPanel';
 
 var TYPE_ICONS: Record<string, any> = { plugin: <Wrench size={16} />, skill: <Zap size={16} />, mcp: <Link size={16} /> };
 var TYPE_LABELS: Record<string, string> = { plugin: 'Plugin', skill: 'Skill', mcp: 'MCP' };
@@ -15,8 +16,18 @@ export default function ToolMarket({ onSelect }: Props) {
   var [search, setSearch] = useState('');
   var [deleteId, setDeleteId] = useState<number | null>(null);
   var [monitorTool, setMonitorTool] = useState<Tool | null>(null);
+  var [toolStats, setToolStats] = useState<Record<string, {tokens: number, calls: number}>>({});
 
   useEffect(function() { fetchTools(typeFilter || undefined); }, [typeFilter]);
+  useEffect(function() {
+    fetch('/api/metrics/rankings?dimension=tool&top=50&minutes=1440', {
+      headers: { 'X-User-Id': localStorage.getItem('current_user_id') || 'admin' }
+    }).then(r => r.json()).then(d => {
+      var map: Record<string, any> = {};
+      (Array.isArray(d) ? d : []).forEach(function(item: any) { map[item.name] = item; });
+      setToolStats(map);
+    }).catch(() => {});
+  }, [tools]);
 
   var filtered = tools.filter(function(t) { return !search || t.name.toLowerCase().indexOf(search.toLowerCase()) >= 0; });
 
@@ -72,6 +83,21 @@ export default function ToolMarket({ onSelect }: Props) {
                   <span>硬: {tool.token_hard_limit?.toLocaleString()}</span>
                   <span>权限: {(tool.permissions || []).join(', ') || 'read'}</span>
                 </div>
+                {toolStats[tool.name] && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '6px 8px', background: 'var(--bg-input)', borderRadius: 4 }}>
+                    <TrendingUp size={12} color="#f59e0b" />
+                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#f59e0b' }}>{(toolStats[tool.name].tokens || 0).toLocaleString()} tokens</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{toolStats[tool.name].calls} calls</span>
+                    <div style={{ flex: 1, height: 16, maxWidth: 80 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={[{ tokens: toolStats[tool.name].tokens }]}>
+                          <ReTooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 4, fontSize: 10, color: '#f1f5f9' }} />
+                          <Bar dataKey="tokens" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -79,7 +105,17 @@ export default function ToolMarket({ onSelect }: Props) {
         </div>
       )}
 {deleteId && <ConfirmDialog open={true} title="确认删除" message="确定删除此工具？" onConfirm={async function() { await deleteTool(deleteId); setDeleteId(null); }} onCancel={function() { setDeleteId(null); }} />}
-      {monitorTool && <EntityMonitor entityType="tool" entityId={monitorTool.id} entityName={monitorTool.name} onClose={function() { setMonitorTool(null); }} />}
+      {monitorTool && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: 12, padding: 24, width: '90vw', maxWidth: 800, maxHeight: '85vh', overflow: 'auto', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>📊 {monitorTool.name} 监控</h2>
+              <button onClick={() => setMonitorTool(null)} style={{ padding: '6px 12px', fontSize: 12, background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--text-secondary)' }}>关闭</button>
+            </div>
+            <EntityBreakdownPanel entityType="tool" entityId={0} entityName={monitorTool.name} toolName={monitorTool.name} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
