@@ -95,11 +95,33 @@ def api_entity_breakdown_detail(entity_type: str, entity_id: int, minutes: int =
     from models.workflow import Workflow
 
     since = datetime.utcnow() - timedelta(minutes=minutes)
-    sessions = db.query(SessionMetric).filter(
+
+    # 解析 owner_id（数据隔离）
+    owner_id = None
+    if entity_type == "agent":
+        ag = db.query(Agent).filter(Agent.id == entity_id).first()
+        owner_id = ag.owner_id if ag else None
+    elif entity_type == "workflow":
+        wf = db.query(Workflow).filter(Workflow.id == entity_id).first()
+        owner_id = "admin"  # workflow 无 owner_id 字段，默认隔离到 admin
+    elif entity_type == "orchestration":
+        from models.orchestration import OrchestrationInstance
+        orch = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == entity_id).first()
+        owner_id = orch.owner_id if orch else None
+    elif entity_type == "project":
+        from models.project import Project as Pj
+        pj = db.query(Pj).filter(Pj.id == entity_id).first()
+        owner_id = pj.owner_id if pj else None
+
+    base_filter = [
         SessionMetric.entity_type == entity_type,
         SessionMetric.entity_id == entity_id,
         SessionMetric.timestamp >= since,
-    ).order_by(SessionMetric.timestamp.asc()).all()
+    ]
+    if owner_id:
+        base_filter.append(SessionMetric.owner_id == owner_id)
+
+    sessions = db.query(SessionMetric).filter(*base_filter).order_by(SessionMetric.timestamp.asc()).all()
 
     # 自身时序桶
     buckets: dict[int, int] = {}
@@ -135,11 +157,14 @@ def api_entity_breakdown_detail(entity_type: str, entity_id: int, minutes: int =
             wf_ids.append(ag.workflow_id)
         wf_list = []
         for wf_id in wf_ids:
-            wf_sessions = db.query(SessionMetric).filter(
+            wf_filters = [
                 SessionMetric.entity_type == "workflow",
                 SessionMetric.entity_id == wf_id,
                 SessionMetric.timestamp >= since,
-            ).all()
+            ]
+            if owner_id:
+                wf_filters.append(SessionMetric.owner_id == owner_id)
+            wf_sessions = db.query(SessionMetric).filter(*wf_filters).all()
             if wf_sessions:
                 wf = db.query(Workflow).filter(Workflow.id == wf_id).first()
                 wf_total = sum(s.total_tokens for s in wf_sessions)
@@ -171,8 +196,8 @@ def api_entity_breakdown_detail(entity_type: str, entity_id: int, minutes: int =
                 ag_sessions = db.query(SessionMetric).filter(
                     SessionMetric.entity_type == "agent",
                     SessionMetric.entity_id == ag_id,
-                    SessionMetric.owner_id == orch.owner_id,
                     SessionMetric.timestamp >= since,
+                    *([SessionMetric.owner_id == owner_id] if owner_id else []),
                 ).all()
                 if ag_sessions:
                     ag = db.query(Agent).filter(Agent.id == ag_id).first()
@@ -191,8 +216,8 @@ def api_entity_breakdown_detail(entity_type: str, entity_id: int, minutes: int =
                             wf_s = db.query(SessionMetric).filter(
                                 SessionMetric.entity_type == "workflow",
                                 SessionMetric.entity_id == wf_id,
-                                SessionMetric.owner_id == orch.owner_id,
                                 SessionMetric.timestamp >= since,
+                                *([SessionMetric.owner_id == owner_id] if owner_id else []),
                             ).all()
                             if wf_s:
                                 wf = db.query(Workflow).filter(Workflow.id == wf_id).first()
