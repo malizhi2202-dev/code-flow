@@ -42,9 +42,12 @@ async def lifespan(app: FastAPI):
     # 启动 runtime.jsonl 文件监控器（每 30s 增量导入 code-kit 运行时数据）
     from services.runtime_watcher import start_watcher
     start_watcher()
-    # 启动 metrics 模拟数据生成器（每 5 分钟注入演示数据）
-    from services.metrics_scheduler import start_scheduler
-    start_scheduler(owner_id="admin", interval_seconds=300)
+    # 启动 metrics 模拟数据生成器（仅 METRICS_DEMO=true 时启用）
+    import os
+    if os.getenv("METRICS_DEMO", "").lower() in ("1", "true", "yes"):
+        from services.metrics_scheduler import start_scheduler
+        start_scheduler(owner_id="admin", interval_seconds=300)
+        print("[monitor] 📊 演示数据生成器已启动（每 5min）")
     yield
     print("[monitor] 关闭.")
 
