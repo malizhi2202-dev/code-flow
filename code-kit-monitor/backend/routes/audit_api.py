@@ -50,5 +50,14 @@ async def get_audit_actions(request: Request):
             {"value": "project:delete", "label": "删除项目/产物"},
             {"value": "project:write", "label": "修改配置"},
             {"value": "workflow:stop", "label": "停止流程"},
+            {"value": "orchestration.create", "label": "创建编排"},
+            {"value": "orchestration.apply", "label": "部署编排"},
+            {"value": "orchestration.delete", "label": "删除编排"},
+            {"value": "orchestration.stop", "label": "停止编排"},
+            {"value": "template.create", "label": "创建模板"},
+            {"value": "template.publish", "label": "发布模板"},
+            {"value": "reconcile.auto_restart", "label": "自愈-自动重启"},
+            {"value": "reconcile.retry", "label": "自愈-重试"},
+            {"value": "reconcile.drift_detected", "label": "自愈-漂移检测"},
         ]
     }
