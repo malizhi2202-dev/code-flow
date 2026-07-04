@@ -126,6 +126,8 @@ class ChatService:
                 "agent_message": agent_msg.to_dict(),
                 "conversation_id": conv.id,
                 "error": str(e)[:200],
+                "truncated": was_truncated,
+                "attack_detected": attack_hit,
             }
 
         # 8. 写 agent message 成功
