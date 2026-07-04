@@ -41,7 +41,7 @@ export default function OrchestrationPage() {
   } = store;
 
   const [showYaml, setShowYaml] = useState(true); // true=yaml, false=md
-  const [splitRatio, setSplitRatio] = useState(40);
+  const [splitRatio, setSplitRatio] = useState(30); // 默认YAML占30%，画布占70%
   const [applyResult, setApplyResult] = useState<any>(null);
   const [validateResult, setValidateResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
