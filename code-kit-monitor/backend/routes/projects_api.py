@@ -35,7 +35,8 @@ def api_create_project(payload: dict, request: Request = None, db: Session = Dep
         owner_id=user["id"], name=payload["name"],
         requirement_raw=payload.get("requirement_raw", ""),
         requirement_type=payload.get("requirement_type", "text"),
-        agent_id=payload.get("agent_id"), workflow_id=payload.get("workflow_id")
+        agent_id=payload.get("agent_id"), workflow_id=payload.get("workflow_id"),
+        orchestration_id=payload.get("orchestration_id")
     )
     db.add(project)
     db.commit()
@@ -60,7 +61,7 @@ def api_update_project(project_id: int, payload: dict, request: Request = None, 
     p = q.first()
     if not p:
         raise HTTPException(status_code=404, detail="项目不存在")
-    for f in ("name", "requirement_raw", "requirement_type", "agent_id", "workflow_id"):
+    for f in ("name", "requirement_raw", "requirement_type", "agent_id", "workflow_id", "orchestration_id"):
         if f in payload:
             setattr(p, f, payload[f])
     p.updated_at = datetime.datetime.utcnow()

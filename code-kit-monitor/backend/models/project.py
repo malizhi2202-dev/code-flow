@@ -16,6 +16,7 @@ class Project(Base):
     parsed_summary: Mapped[str] = mapped_column(Text, default="")
     agent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("agents.id"), nullable=True)
     workflow_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workflows.id"), nullable=True)
+    orchestration_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("orchestration_instances.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="pending")  # pending|running|completed|error|stopped|cancelled
     visibility: Mapped[str] = mapped_column(String(16), default="private")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
@@ -27,6 +28,7 @@ class Project(Base):
             "requirement_raw": self.requirement_raw, "requirement_type": self.requirement_type,
             "parsed_summary": self.parsed_summary,
             "agent_id": self.agent_id, "workflow_id": self.workflow_id,
+            "orchestration_id": self.orchestration_id,
             "status": self.status, "visibility": self.visibility,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

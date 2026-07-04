@@ -13,19 +13,24 @@ export default function ProjectManager({ onSelect }: Props) {
   const { workflows, fetchWorkflows } = useWorkflows();
   const [showCreate, setShowCreate] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [form, setForm] = useState({ name: '', requirement_raw: '', requirement_type: 'text', agent_id: 0 });
+  const [orchInstances, setOrchInstances] = useState<any[]>([]);
+  const [form, setForm] = useState({ name: '', requirement_raw: '', requirement_type: 'text', agent_id: 0, orchestration_id: 0 });
 
-  useEffect(() => { fetchProjects(); fetchAgents(); fetchWorkflows(); }, []);
+  useEffect(() => {
+    fetchProjects(); fetchAgents(); fetchWorkflows();
+    fetch('/api/orchestration', { headers: { 'X-User-Id': localStorage.getItem('current_user_id') || 'admin' } })
+      .then(r => r.json()).then(d => setOrchInstances(Array.isArray(d) ? d : (d.instances || []))).catch(() => {});
+  }, []);
 
   const handleCreate = async () => {
-    // Agent 已绑定工作流，创建时自动关联
     const agent = agents.find(a => a.id === form.agent_id);
     await createProject({
       ...form,
       workflow_id: agent?.workflow_ids?.[0] || agent?.workflow_id || 0,
+      orchestration_id: form.orchestration_id || undefined,
     });
     setShowCreate(false);
-    setForm({ name: '', requirement_raw: '', requirement_type: 'text', agent_id: 0 });
+    setForm({ name: '', requirement_raw: '', requirement_type: 'text', agent_id: 0, orchestration_id: 0 });
   };
 
   // 获取 Agent 绑定的工作流
@@ -133,6 +138,35 @@ export default function ProjectManager({ onSelect }: Props) {
                   )}
                 </div>
               </div>
+
+              {/* 编排组选择 */}
+              {orchInstances.length > 0 && (
+                <div>
+                  <label style={lbl}>🔀 绑定编排组（可选）</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {orchInstances.map((oi: any) => {
+                      const selected = form.orchestration_id === oi.id;
+                      return (
+                        <div key={oi.id} onClick={() => setForm({ ...form, orchestration_id: selected ? 0 : oi.id })}
+                          style={{
+                            padding: '8px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                            background: selected ? 'rgba(168,85,247,0.1)' : 'var(--bg-input)',
+                            border: selected ? '1px solid #a855f7' : '1px solid var(--color-border)',
+                            display: 'flex', alignItems: 'center', gap: 6,
+                          }}>
+                          {selected ? <Check size={14} color="#a855f7" /> : <span style={{ fontSize: 14 }}>🔀</span>}
+                          <div>
+                            <div style={{ fontWeight: 600, color: 'var(--color-text)' }}>{oi.name}</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>
+                              {(oi.agent_ids || []).length} Agent · {oi.status}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px', background: 'var(--color-bg)', borderRadius: 4 }}>
                 <Upload size={14} color="var(--color-text-secondary)" />
