@@ -127,10 +127,14 @@ function CanvasInner({
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(processedEdges as any);
   const { fitView } = useReactFlow();
 
-  // 节点变化时同步到父组件 + fitView
+  // 关键：props 变化时同步到内部状态（useNodesState 只用 initial value 一次）
+  useEffect(() => { setNodes(processedNodes as any); }, [processedNodes]);
+  useEffect(() => { setEdges(processedEdges as any); }, [processedEdges]);
+
+  // 节点加载后自动 fitView
   useEffect(() => {
     if (nodes.length > 0) {
-      const t = setTimeout(() => fitView({ padding: 0.3, duration: 200 }), 400);
+      const t = setTimeout(() => fitView({ padding: 0.3, duration: 300 }), 500);
       return () => clearTimeout(t);
     }
   }, [processedNodes.length]);
