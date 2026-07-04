@@ -54,6 +54,8 @@ export default function MonitoringDashboard() {
   const [breakdown, setBreakdown] = useState<{ tools: EntityItem[]; workflows: EntityItem[]; agents: EntityItem[]; projects: EntityItem[] } | null>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [live, setLive] = useState<any>({});
+  const [rankings, setRankings] = useState<any[]>([]);
+  const [rankDim, setRankDim] = useState('agent');
 
   const fetchAll = function() {
     var uid = localStorage.getItem('current_user_id') || 'admin';
@@ -61,14 +63,16 @@ export default function MonitoringDashboard() {
       fetch('/api/metrics/entity-breakdown?minutes=1440', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
       fetch('/api/metrics/sessions?limit=200', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
       fetch('/api/metrics/live?minutes=1440', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
+      fetch('/api/metrics/rankings?dimension=' + rankDim + '&top=10&minutes=1440', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
     ]).then(function(results) {
       setBreakdown(results[0]);
       setSessions(results[1].sessions || []);
       setLive(results[2]);
+      setRankings(Array.isArray(results[3]) ? results[3] : []);
     }).catch(function() {});
   };
 
-  useEffect(function() { fetchAll(); var t = setInterval(fetchAll, 30000); return function() { clearInterval(t); }; }, []);
+  useEffect(function() { fetchAll(); var t = setInterval(fetchAll, 30000); return function() { clearInterval(t); }; }, [rankDim]);
 
   // 汇总计算
   var allItems = (breakdown?.tools || []).concat(breakdown?.workflows || []).concat(breakdown?.agents || []).concat(breakdown?.projects || []);
@@ -178,6 +182,43 @@ export default function MonitoringDashboard() {
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 排行榜 */}
+      <div style={{ marginTop: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>🔥 消耗排行榜（24h）</h2>
+          <div style={{ display: 'flex', gap: 2, background: 'var(--bg-input)', borderRadius: 4, padding: 2 }}>
+            {['agent','workflow','tool','project'].map(d => (
+              <button key={d} onClick={() => setRankDim(d)} style={{
+                padding: '3px 10px', fontSize: 11, border: 'none', borderRadius: 3, cursor: 'pointer',
+                background: rankDim === d ? 'var(--color-primary)' : 'transparent',
+                color: rankDim === d ? '#fff' : 'var(--text-secondary)',
+              }}>{d === 'agent' ? '🤖 Agent' : d === 'workflow' ? '🔀 工作流' : d === 'tool' ? '🔧 工具' : '📁 项目'}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ background: 'var(--bg-card)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead><tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-input)' }}>
+              <th style={{ ...th, width: 40, textAlign: 'center' }}>#</th>
+              <th style={th}>名称</th>
+              <th style={{ ...th, textAlign: 'right' }}>Token</th>
+              <th style={{ ...th, textAlign: 'right' }}>调用次数</th>
+            </tr></thead>
+            <tbody>
+              {rankings.map((item, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ ...td, textAlign: 'center', fontWeight: 600, color: i < 3 ? '#f59e0b' : 'var(--text-dim)' }}>{i + 1}</td>
+                  <td style={{ ...td, fontFamily: 'var(--font-mono)' }}>{item.name}</td>
+                  <td style={{ ...td, fontFamily: 'var(--font-mono)', textAlign: 'right', color: '#5cb878' }}>{item.tokens?.toLocaleString()}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{item.calls}</td>
+                </tr>
+              ))}
+              {rankings.length === 0 && <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>暂无排行数据</td></tr>}
             </tbody>
           </table>
         </div>
