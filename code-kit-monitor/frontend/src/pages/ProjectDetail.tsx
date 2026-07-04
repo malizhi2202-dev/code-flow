@@ -16,7 +16,7 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
   const { workflows, fetchWorkflows } = useWorkflows();
   const { data: metrics, fetchMetrics } = useMetrics();
 
-  const [tab, setTab] = useState<'overview' | 'chat' | 'agent' | 'monitor' | 'history'>('overview');
+  const [tab, setTab] = useState<'overview' | 'chat' | 'agent' | 'orchestration' | 'monitor' | 'history'>('overview');
 
   // 衍生：项目 + 绑定 Agent（提前计算，供 useEffect 使用）
   const project = projects.find(p => p.id === projectId);
@@ -101,9 +101,9 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
 
       {/* Tab 导航 */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border-normal, #2a2d35)', overflowX: 'auto' }}>
-        {(['overview','chat','agent','monitor','history'] as const).map(t => (
+        {(['overview','chat','agent','orchestration','monitor','history'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 14px', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent', color: tab === t ? 'var(--color-primary)' : 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 12, fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
-            {t === 'overview' ? '📋 概览' : t === 'chat' ? '💬 对话' : t === 'agent' ? '🤖 Agent' : t === 'monitor' ? '📊 监控' : '📜 历史'}
+            {t === 'overview' ? '📋 概览' : t === 'chat' ? '💬 对话' : t === 'agent' ? '🤖 Agent' : t === 'orchestration' ? '🔀 编排组' : t === 'monitor' ? '📊 监控' : '📜 历史'}
           </button>
         ))}
       </div>
@@ -236,32 +236,6 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
                 )}
               </div>
             </div>
-
-            {/* 编排组信息 */}
-            {orchInfo && (
-              <div style={panel}>
-                <h3 style={sectionTitle}>
-                  <Network size={14} color="#a855f7" style={{ marginRight: 6 }} />
-                  绑定编排组
-                </h3>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{orchInfo.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
-                      {orchInfo.status} · {orchInfo.agent_count} Agents · 优先级 {orchInfo.priority}
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: 10, padding: '2px 8px', borderRadius: 3,
-                    background: orchInfo.status === 'converging' ? 'rgba(92,184,120,0.15)' : 'rgba(232,164,80,0.15)',
-                    color: orchInfo.status === 'converging' ? '#5cb878' : '#e8a450',
-                  }}>{orchInfo.status}</span>
-                </div>
-              </div>
-            )}
-
-            {/* 项目级监控面板 */}
-            <EntityBreakdownPanel entityType="project" entityId={projectId} entityName={project?.name || '项目'} />
 
             {/* 消耗监控 */}
             <div style={panel}>
@@ -446,7 +420,46 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
         </div>
       )}
 
+      {tab === 'orchestration' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 700 }}>
+          {project?.orchestration_id ? (
+            <>
+              {orchInfo && (
+                <div style={panel}>
+                  <h3 style={sectionTitle}><Network size={14} color="#a855f7" style={{ marginRight: 6 }} />绑定编排组</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{orchInfo.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
+                        {orchInfo.status} · {orchInfo.agent_count} Agents · 优先级 {orchInfo.priority}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 3,
+                      background: orchInfo.status === 'converging' ? 'rgba(92,184,120,0.15)' : 'rgba(232,164,80,0.15)',
+                      color: orchInfo.status === 'converging' ? '#5cb878' : '#e8a450',
+                    }}>{orchInfo.status}</span>
+                  </div>
+                </div>
+              )}
+              <EntityBreakdownPanel entityType="orchestration" entityId={project.orchestration_id} entityName={orchInfo?.name || '编排组'} />
+            </>
+          ) : (
+            <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
+              <Network size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
+              <p style={{ fontSize: 14, margin: '0 0 8px' }}>项目未绑定编排组</p>
+              <p style={{ fontSize: 12, margin: 0 }}>创建项目时可选择绑定编排组，或联系管理员绑定</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {tab === 'monitor' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 700 }}>
+          <EntityBreakdownPanel entityType="project" entityId={projectId} entityName={project?.name || '项目'} />
+        </div>
+      )}
+
+      {tab === 'monitor' && false && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
             <div style={card}><span style={cardVal}>{(metrics?.total_tokens || 0).toLocaleString()}</span><span style={cardLbl}>Token 消耗</span></div>
