@@ -10,9 +10,7 @@
 > **全栈 AI 开发平台** — 从需求到归档的 Agent 编排 + 可视化监控面板
 > **Full-stack AI Development Platform** — Agent Orchestration + Visual Monitoring from Requirements to Archive
 
-<p align="center">
-  <img src="./demo.mp4" alt="Demo" width="800" />
-</p>
+![demo](./demo.gif)
 
 ---
 
