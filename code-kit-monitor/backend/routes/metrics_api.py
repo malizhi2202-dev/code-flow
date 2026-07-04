@@ -84,6 +84,146 @@ def api_record_metric(payload: dict, request: Request = None, db: Session = Depe
     return {"status": "recorded"}
 
 
+# ── 实体维度消耗分拆 ──
+
+@router.get("/entity/{entity_type}/{entity_id}/breakdown")
+def api_entity_breakdown_detail(entity_type: str, entity_id: int, minutes: int = 60, request: Request = None, db: Session = Depends(get_db)):
+    """单实体消耗分拆：自身 + 子工作流 + 工具，1min 桶."""
+    from datetime import datetime, timedelta
+    from models.metrics import SessionMetric
+    from models.agent import Agent
+    from models.workflow import Workflow
+
+    since = datetime.utcnow() - timedelta(minutes=minutes)
+    sessions = db.query(SessionMetric).filter(
+        SessionMetric.entity_type == entity_type,
+        SessionMetric.entity_id == entity_id,
+        SessionMetric.timestamp >= since,
+    ).order_by(SessionMetric.timestamp.asc()).all()
+
+    # 自身时序桶
+    buckets: dict[int, int] = {}
+    # 工具聚合
+    tool_info: dict[str, dict] = {}
+    total_calls = 0
+
+    for s in sessions:
+        ts_bucket = int(s.timestamp.timestamp()) // 60 * 60
+        buckets[ts_bucket] = buckets.get(ts_bucket, 0) + s.total_tokens
+        total_calls += 1
+        if s.tool_name:
+            if s.tool_name not in tool_info:
+                tool_info[s.tool_name] = {"name": s.tool_name, "tokens": 0, "hits": 0}
+            tool_info[s.tool_name]["tokens"] += s.total_tokens
+            tool_info[s.tool_name]["hits"] += 1
+
+    total_tokens = sum(s.total_tokens for s in sessions)
+
+    result = {
+        "entity_type": entity_type, "entity_id": entity_id, "minutes": minutes,
+        "total_tokens": total_tokens, "total_calls": total_calls,
+        "avg_tokens_per_min": round(total_tokens / max(minutes, 1)),
+        "buckets": [{"ts": ts, "tokens": v} for ts, v in sorted(buckets.items())],
+        "tools": sorted(tool_info.values(), key=lambda x: -x["tokens"]),
+    }
+
+    # 如果是 agent，加工作流分拆
+    if entity_type == "agent":
+        ag = db.query(Agent).filter(Agent.id == entity_id).first()
+        wf_ids = (ag.workflow_ids or []) if ag else []
+        if ag and ag.workflow_id and ag.workflow_id not in wf_ids:
+            wf_ids.append(ag.workflow_id)
+        wf_list = []
+        for wf_id in wf_ids:
+            wf_sessions = db.query(SessionMetric).filter(
+                SessionMetric.entity_type == "workflow",
+                SessionMetric.entity_id == wf_id,
+                SessionMetric.timestamp >= since,
+            ).all()
+            if wf_sessions:
+                wf = db.query(Workflow).filter(Workflow.id == wf_id).first()
+                wf_total = sum(s.total_tokens for s in wf_sessions)
+                wf_buckets: dict[int, int] = {}
+                wf_tools: dict[str, dict] = {}
+                for s in wf_sessions:
+                    ts = int(s.timestamp.timestamp()) // 60 * 60
+                    wf_buckets[ts] = wf_buckets.get(ts, 0) + s.total_tokens
+                    if s.tool_name:
+                        if s.tool_name not in wf_tools:
+                            wf_tools[s.tool_name] = {"name": s.tool_name, "tokens": 0, "hits": 0}
+                        wf_tools[s.tool_name]["tokens"] += s.total_tokens
+                        wf_tools[s.tool_name]["hits"] += 1
+                wf_list.append({
+                    "entity_id": wf_id, "name": wf.name if wf else f"WF#{wf_id}",
+                    "total_tokens": wf_total, "calls": len(wf_sessions),
+                    "buckets": [{"ts": ts, "tokens": v} for ts, v in sorted(wf_buckets.items())],
+                    "tools": sorted(wf_tools.values(), key=lambda x: -x["tokens"]),
+                })
+        result["workflows"] = sorted(wf_list, key=lambda x: -x["total_tokens"])
+
+    # 如果是编排组，加子 Agent 分拆
+    if entity_type == "orchestration":
+        from models.orchestration import OrchestrationInstance
+        orch = db.query(OrchestrationInstance).filter(OrchestrationInstance.id == entity_id).first()
+        agent_list = []
+        if orch:
+            for ag_id in (orch.agent_ids or []):
+                ag_sessions = db.query(SessionMetric).filter(
+                    SessionMetric.entity_type == "agent",
+                    SessionMetric.entity_id == ag_id,
+                    SessionMetric.owner_id == orch.owner_id,
+                    SessionMetric.timestamp >= since,
+                ).all()
+                if ag_sessions:
+                    ag = db.query(Agent).filter(Agent.id == ag_id).first()
+                    ag_total = sum(s.total_tokens for s in ag_sessions)
+                    ag_buckets: dict[int, int] = {}
+                    for s in ag_sessions:
+                        ts = int(s.timestamp.timestamp()) // 60 * 60
+                        ag_buckets[ts] = ag_buckets.get(ts, 0) + s.total_tokens
+                    # Agent 的工作流 + 工具消耗
+                    ag_wf_list = []
+                    if ag:
+                        wf_ids = (ag.workflow_ids or [])[:]
+                        if ag.workflow_id and ag.workflow_id not in wf_ids:
+                            wf_ids.append(ag.workflow_id)
+                        for wf_id in wf_ids:
+                            wf_s = db.query(SessionMetric).filter(
+                                SessionMetric.entity_type == "workflow",
+                                SessionMetric.entity_id == wf_id,
+                                SessionMetric.owner_id == orch.owner_id,
+                                SessionMetric.timestamp >= since,
+                            ).all()
+                            if wf_s:
+                                wf = db.query(Workflow).filter(Workflow.id == wf_id).first()
+                                wf_total_s = sum(s2.total_tokens for s2 in wf_s)
+                                wf_b: dict[int, int] = {}
+                                wf_t: dict[str, dict] = {}
+                                for s2 in wf_s:
+                                    ts2 = int(s2.timestamp.timestamp()) // 60 * 60
+                                    wf_b[ts2] = wf_b.get(ts2, 0) + s2.total_tokens
+                                    if s2.tool_name:
+                                        if s2.tool_name not in wf_t:
+                                            wf_t[s2.tool_name] = {"name": s2.tool_name, "tokens": 0, "hits": 0}
+                                        wf_t[s2.tool_name]["tokens"] += s2.total_tokens
+                                        wf_t[s2.tool_name]["hits"] += 1
+                                ag_wf_list.append({
+                                    "entity_id": wf_id, "name": wf.name if wf else f"WF#{wf_id}",
+                                    "total_tokens": wf_total_s, "calls": len(wf_s),
+                                    "buckets": [{"ts": ts2, "tokens": v2} for ts2, v2 in sorted(wf_b.items())],
+                                    "tools": sorted(wf_t.values(), key=lambda x2: -x2["tokens"]),
+                                })
+                    agent_list.append({
+                        "entity_id": ag_id, "name": ag.name if ag else f"Agent#{ag_id}",
+                        "total_tokens": ag_total, "calls": len(ag_sessions),
+                        "buckets": [{"ts": ts, "tokens": v} for ts, v in sorted(ag_buckets.items())],
+                        "workflows": sorted(ag_wf_list, key=lambda x: -x["total_tokens"]),
+                    })
+        result["agents"] = sorted(agent_list, key=lambda x: -x["total_tokens"])
+
+    return result
+
+
 # ── 项目级消耗分拆 ──
 
 @router.get("/project/{project_id}/breakdown")

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Save, Plus, Trash2, ChevronUp, ChevronDown, BarChart3, GitMerge, ArrowRight, GitFork } from 'lucide-react';
 import { useWorkflows } from '../stores/workflows';
-import EntityMonitor from '../components/EntityMonitor';
+import EntityBreakdownPanel from '../components/EntityBreakdownPanel';
 
 const th: React.CSSProperties = { padding: '6px 8px', textAlign: 'left', color: 'var(--text-dim)', fontWeight: 500, fontSize: 10 };
 const td: React.CSSProperties = { padding: '4px 8px', fontSize: 11, color: 'var(--color-text)' };
@@ -256,7 +256,7 @@ export default function WorkflowDetail({ workflowId, onBack }: { workflowId: num
       )}
 
       {tab === 'monitor' && (
-        <EntityMonitor entityType="workflow" entityId={workflowId} entityName={wf?.name || '工作流'} onClose={() => setTab('nodes')} />
+        <EntityBreakdownPanel entityType="workflow" entityId={workflowId} entityName={wf?.name || '工作流'} />
       )}
     </div>
   );
