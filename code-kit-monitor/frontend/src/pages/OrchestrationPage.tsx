@@ -108,11 +108,11 @@ export default function OrchestrationPage() {
 
   // Canvas handlers — 仅本地更新状态，不自动回写YAML（避免死循环）
   const handleNodesChange = useCallback((nodes: any[]) => {
-    setTopologyState((prev: any) => ({ ...prev, nodes }));
-  }, []);
+    setTopologyState({ nodes, edges: topologyState.edges });
+  }, [topologyState.edges]);
   const handleEdgesChange = useCallback((edges: any[]) => {
-    setTopologyState((prev: any) => ({ ...prev, edges }));
-  }, []);
+    setTopologyState({ nodes: topologyState.nodes, edges });
+  }, [topologyState.nodes]);
 
   // 手动同步：画布 → YAML
   const syncToYaml = () => {
@@ -134,7 +134,7 @@ export default function OrchestrationPage() {
       markerEnd: { type: 'arrowclosed' as const, width: 14, height: 14, color: 'rgba(84,140,240,0.5)' },
       style: { stroke: 'rgba(255,255,255,0.15)', strokeWidth: 1.5 },
     };
-    setTopologyState((prev: any) => ({ ...prev, edges: [...prev.edges, newEdge] }));
+    setTopologyState({ nodes: topologyState.nodes, edges: [...topologyState.edges, newEdge] });
     setEdgeConfig(edgeId, defaultEdgeConfig(edgeId, sourceName, targetName));
     setSelectedEdge(edgeId);
   }, [topologyState.nodes]);
@@ -145,18 +145,12 @@ export default function OrchestrationPage() {
 
   const handleEdgeSave = useCallback((config: EdgeConfig) => {
     setEdgeConfig(config.id, config);
-    // sync to YAML
-    const yaml = topologyToYaml(topologyState.nodes, topologyState.edges, edgeConfigs, orchName);
-    setYamlContent(yaml);
-  }, [topologyState, edgeConfigs, orchName]);
-
+  }, []);
   const handleEdgeDelete = useCallback((edgeId: string) => {
     removeEdgeConfig(edgeId);
-    const newEdges = topologyState.edges.filter((e) => e.id !== edgeId);
-    setTopologyState({ ...topologyState, edges: newEdges });
-    const yaml = topologyToYaml(topologyState.nodes, newEdges, edgeConfigs, orchName);
-    setYamlContent(yaml);
-  }, [topologyState, edgeConfigs, orchName]);
+    const newEdges = topologyState.edges.filter((e: any) => e.id !== edgeId);
+    setTopologyState({ nodes: topologyState.nodes, edges: newEdges });
+  }, [topologyState]);
 
   const handleNodeDetailClick = useCallback((nodeId: string) => {
     const node = topologyState.nodes.find((n) => n.id === nodeId);
@@ -171,9 +165,7 @@ export default function OrchestrationPage() {
       data: { label: agent.name, model: agent.model_name, runtime: agent.runtime, badge: agent.runtime, status: 'not_started', agentId: agent.id },
     };
     const newNodes = [...topologyState.nodes, newNode];
-    setTopologyState({ ...topologyState, nodes: newNodes });
-    const yaml = topologyToYaml(newNodes, topologyState.edges, edgeConfigs, orchName);
-    setYamlContent(yaml);
+    setTopologyState({ nodes: newNodes, edges: topologyState.edges });
   }, [topologyState, edgeConfigs, orchName]);
 
   const handleApply = async () => {
