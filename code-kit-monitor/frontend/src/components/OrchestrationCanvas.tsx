@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
-  Node, Edge, useNodesState, useEdgesState,
+  Node, Edge,
   MarkerType, Handle, Position, Connection, useReactFlow,
+  applyNodeChanges, applyEdgeChanges,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Bot, ArrowRight, Circle, ExternalLink } from 'lucide-react';
@@ -103,8 +104,10 @@ function CanvasInner({
   nodes: initialNodes, edges: initialEdges, onNodesChange, onEdgesChange,
   onConnect, onNodeClick, onEdgeClick, onNodeDetailClick, onDrop, readOnly,
 }: Props) {
-  // 处理节点数据注入 onDetailClick
-  const processedNodes = useMemo(() =>
+  const { fitView } = useReactFlow();
+
+  // 直接使用 props 作为受控组件，不用 useNodesState
+  const nodes = useMemo(() =>
     initialNodes.map((n: any) => ({
       ...n,
       data: { ...n.data, onDetailClick: onNodeDetailClick ? () => onNodeDetailClick(n.id) : undefined },
@@ -112,7 +115,7 @@ function CanvasInner({
     [initialNodes, onNodeDetailClick]
   );
 
-  const processedEdges = useMemo(() =>
+  const edges = useMemo(() =>
     initialEdges.map((e: any) => ({
       ...e,
       type: e.type || 'sequential',
@@ -123,33 +126,12 @@ function CanvasInner({
     [initialEdges]
   );
 
-  const [nodes, setNodes, onNodesChangeInternal] = useNodesState(processedNodes as any);
-  const [edges, setEdges, onEdgesChangeInternal] = useEdgesState(processedEdges as any);
-  const { fitView } = useReactFlow();
-
-  // 关键：props 变化时同步到内部状态（useNodesState 只用 initial value 一次）
-  useEffect(() => { setNodes(processedNodes as any); }, [processedNodes]);
-  useEffect(() => { setEdges(processedEdges as any); }, [processedEdges]);
-
-  // 节点加载后自动 fitView
   useEffect(() => {
     if (nodes.length > 0) {
-      const t = setTimeout(() => fitView({ padding: 0.3, duration: 300 }), 500);
+      const t = setTimeout(() => fitView({ padding: 0.3, duration: 300 }), 400);
       return () => clearTimeout(t);
     }
-  }, [processedNodes.length]);
-
-  const handleNodesChange = useCallback((changes: any) => {
-    onNodesChangeInternal(changes);
-    onNodesChange?.(nodes);
-  }, [nodes, onNodesChange, onNodesChangeInternal]);
-
-  const handleEdgesChange = useCallback((changes: any) => {
-    onEdgesChangeInternal(changes);
-    onEdgesChange?.(edges);
-  }, [edges, onEdgesChange, onEdgesChangeInternal]);
-
-  const handleConnect = useCallback((c: Connection) => { onConnect?.(c); }, [onConnect]);
+  }, [nodes.length, fitView]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, []);
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -167,9 +149,9 @@ function CanvasInner({
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={handleNodesChange}
-        onEdgesChange={handleEdgesChange}
-        onConnect={handleConnect}
+        onNodesChange={(changes) => onNodesChange?.(applyNodeChanges(changes, nodes))}
+        onEdgesChange={(changes) => onEdgesChange?.(applyEdgeChanges(changes, edges))}
+        onConnect={(c) => onConnect?.(c)}
         onNodeClick={(_, node) => onNodeClick?.(node.id)}
         onEdgeClick={(_, edge) => onEdgeClick?.(edge.id)}
         nodeTypes={nodeTypes}
@@ -191,3 +173,4 @@ function CanvasInner({
     </div>
   );
 }
+
