@@ -7,7 +7,7 @@ import { useWorkflows } from '../stores/workflows';
 import { useMetrics } from '../stores/metrics';
 import ChatWindow from '../components/ChatWindow';
 
-interface Props { projectId: number; onBack: () => void; onNavigateAgent?: (agentId: number) => void; }
+interface Props { projectId: number; onBack: () => void; onNavigateAgent?: (agent: any) => void; }
 
 export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Props) {
   const { projects, fetchProjects, executeProject, stopProject } = useProjects();
@@ -193,7 +193,7 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
                     </div>
                   </div>
                 </div>
-                <button onClick={() => { if (onNavigateAgent) onNavigateAgent(boundAgent.id); }} style={{ padding: '6px 14px', fontSize: 11, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <button onClick={() => { if (onNavigateAgent) onNavigateAgent(boundAgent); }} style={{ padding: '6px 14px', fontSize: 11, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                   <ExternalLink size={12} /> 查看详情
                 </button>
               </div>
