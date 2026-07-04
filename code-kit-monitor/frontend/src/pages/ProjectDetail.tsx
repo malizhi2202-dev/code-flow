@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Play, Square, RefreshCw, BarChart3, FileText, GitBranch, Bot, Clock } from 'lucide-react';
+import { ArrowLeft, Play, Square, RefreshCw, BarChart3, FileText, GitBranch, Bot, Clock, MessageSquare } from 'lucide-react';
 import { useProjects } from '../stores/projects';
 import { useAgents } from '../stores/agents';
 import { useWorkflows } from '../stores/workflows';
 import { useMetrics } from '../stores/metrics';
+import ChatWindow from '../components/ChatWindow';
 
 interface Props { projectId: number; onBack: () => void; }
 
@@ -17,8 +18,38 @@ export default function ProjectDetail({ projectId, onBack }: Props) {
   const [bindAgent, setBindAgent] = useState<number>(0);
   const [bindWorkflow, setBindWorkflow] = useState<number>(0);
 
+  // 项目对话
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [chatConversationId, setChatConversationId] = useState<number | null>(null);
+
   useEffect(() => { fetchProjects(); fetchAgents(); fetchWorkflows(); }, []);
   useEffect(() => { if (projectId) fetchMetrics('project', projectId, 60); }, [projectId, tab]);
+
+  const uid = () => localStorage.getItem('current_user_id') || 'admin';
+
+  const sendChatMessage = (content: string) => {
+    if (!boundAgent) { setChatError('请先绑定 Agent'); return; }
+    setChatLoading(true); setChatError(null);
+    const tempMsg = { id: Date.now(), role: 'user', content, status: 'done', created_at: new Date().toISOString() };
+    setChatMessages(prev => [...prev, tempMsg]);
+    fetch('/api/agents/' + boundAgent.id + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-User-Id': uid() },
+      body: JSON.stringify({ content, conversation_id: chatConversationId, project_id: projectId }),
+    }).then(r => r.json()).then(d => {
+      if (d.ok) {
+        setChatMessages(prev => prev.filter(m => m.id !== tempMsg.id).concat([d.user_message, d.agent_message]));
+        setChatConversationId(d.conversation_id);
+        if (d.agent_message?.status === 'error') setChatError(d.agent_message.content);
+      } else {
+        setChatMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+        setChatError(d.detail || '发送失败');
+      }
+      setChatLoading(false);
+    }).catch(() => { setChatLoading(false); setChatError('网络错误'); });
+  };
 
   const project = projects.find(p => p.id === projectId);
   if (!project) return <div style={{ padding: 40, color: 'var(--text-weak)' }}>加载中...</div>;
@@ -40,9 +71,9 @@ export default function ProjectDetail({ projectId, onBack }: Props) {
 
       {/* Tab 导航——项目维度全部模块 */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border-normal, #2a2d35)', overflowX: 'auto' }}>
-        {(['overview','tools','workflows','roles','agent','security','monitor','history'] as const).map(t => (
+        {(['overview','chat','tools','workflows','roles','agent','security','monitor','history'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 14px', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent', color: tab === t ? 'var(--color-primary)' : 'var(--color-text-secondary)', cursor: 'pointer', fontSize: 12, fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
-            {t === 'overview' ? '📋 概览' : t === 'tools' ? '🔧 工具' : t === 'workflows' ? '🔀 工作流' : t === 'roles' ? '👥 角色' : t === 'agent' ? '🤖 Agent' : t === 'security' ? '🛡️ 安全' : t === 'monitor' ? '📊 监控' : '📜 历史'}
+            {t === 'overview' ? '📋 概览' : t === 'chat' ? '💬 对话' : t === 'tools' ? '🔧 工具' : t === 'workflows' ? '🔀 工作流' : t === 'roles' ? '👥 角色' : t === 'agent' ? '🤖 Agent' : t === 'security' ? '🛡️ 安全' : t === 'monitor' ? '📊 监控' : '📜 历史'}
           </button>
         ))}
       </div>
@@ -98,6 +129,33 @@ export default function ProjectDetail({ projectId, onBack }: Props) {
 
           {/* 时间 */}
           <div style={{ fontSize: 11, color: 'var(--color-text-dim)', display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={12} /> 创建于 {project.created_at?.slice(0, 19)}</div>
+        </div>
+      )}
+
+      {tab === 'chat' && (
+        <div style={{ height: 'calc(100vh - 200px)', minHeight: 400 }}>
+          {boundAgent ? (
+            <ChatWindow
+              agentId={boundAgent.id}
+              agentName={boundAgent.name}
+              messages={chatMessages}
+              loading={chatLoading}
+              error={chatError}
+              onSend={sendChatMessage}
+              onRetry={() => setChatError(null)}
+              extraHeader={
+                <span style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <MessageSquare size={12} /> 项目专属对话 · Agent: {boundAgent.name}
+                </span>
+              }
+            />
+          ) : (
+            <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>
+              <MessageSquare size={48} style={{ marginBottom: 16, opacity: 0.3 }} />
+              <p style={{ fontSize: 14, margin: '0 0 8px' }}>暂未绑定 Agent</p>
+              <p style={{ fontSize: 12, margin: 0 }}>请先在「📋 概览」中绑定一个 Agent，再使用对话功能</p>
+            </div>
+          )}
         </div>
       )}
 
