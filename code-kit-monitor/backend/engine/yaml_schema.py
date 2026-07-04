@@ -181,6 +181,8 @@ def validate_yaml(yaml_str: str, strict: bool = True) -> dict:
 
     if doc is None:
         return {"valid": False, "errors": [{"line": 0, "field": "", "message": "YAML 内容为空"}]}
+    if not isinstance(doc, dict):
+        return {"valid": False, "errors": [{"line": 0, "field": "", "message": f"YAML 顶层必须是对象，实际为: {type(doc).__name__}"}]}
 
     # 3. 嵌套深度
     depth = _check_nesting(doc)
