@@ -190,9 +190,8 @@ export default function App() {
     }
     if (showWorkflowCreate) return <WorkflowCreate onBack={() => setShowWorkflowCreate(false)} onCreated={(id) => { setShowWorkflowCreate(false); setWorkflowDetailId(id); }} />;
     if (workflowDetailId) return <WorkflowDetail workflowId={workflowDetailId} onBack={() => setWorkflowDetailId(null)} />;
-    if (projectDetailId) return <ProjectDetail projectId={projectDetailId} onBack={() => setProjectDetailId(null)} onNavigateAgent={(agentId) => {
-      const ag = useAgents.getState().agents.find(a => a.id === agentId);
-      setProjectDetailId(null); setNav('agents'); if (ag) setAgentDetail(ag);
+    if (projectDetailId) return <ProjectDetail projectId={projectDetailId} onBack={() => setProjectDetailId(null)} onNavigateAgent={(agent) => {
+      setProjectDetailId(null); setNav('agents'); setAgentDetail(agent);
     }} />;
     if (detailId) return <Detail changeId={detailId} onBack={() => setDetailId(null)} />;
     switch (nav) {
