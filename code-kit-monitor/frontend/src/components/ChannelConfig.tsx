@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, Wifi, WifiOff, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, X, Wifi, WifiOff, RefreshCw, Trash2, QrCode } from 'lucide-react';
+import QrScanModal from './QrScanModal';
 
 const CHANNEL_META: Record<string, { label: string; icon: string; fields: { key: string; label: string; type: string; placeholder: string }[] }> = {
   feishu: {
@@ -64,6 +65,8 @@ export default function ChannelConfigComponent({ agentId }: ChannelConfigProps) 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ channel_type: 'feishu', credentials: {} });
   const [testing, setTesting] = useState<number | null>(null);
+  const [showQrScan, setShowQrScan] = useState(false);
+  const [qrScanChannelType, setQrScanChannelType] = useState('feishu');
   const uid = () => localStorage.getItem('current_user_id') || 'admin';
 
   const loadChannels = () => {
@@ -170,13 +173,29 @@ export default function ChannelConfigComponent({ agentId }: ChannelConfigProps) 
       })}
 
       {!showForm && (
-        <button onClick={() => setShowForm(true)} style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px',
-          background: 'none', border: '1px dashed var(--border)', borderRadius: 6,
-          cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 11, width: '100%',
-        }}>
-          <Plus size={14} /> 添加渠道
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setShowForm(true)} style={{
+            display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px',
+            background: 'none', border: '1px dashed var(--border)', borderRadius: 6,
+            cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 11, flex: 1,
+          }}>
+            <Plus size={14} /> 添加渠道
+          </button>
+          <button onClick={() => { setQrScanChannelType('feishu'); setShowQrScan(true); }} style={{
+            display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px',
+            background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6,
+            cursor: 'pointer', fontSize: 11,
+          }}>
+            <QrCode size={14} /> 扫码接入飞书
+          </button>
+          <button onClick={() => { setQrScanChannelType('dingtalk'); setShowQrScan(true); }} style={{
+            display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px',
+            background: 'var(--bg-card)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 6,
+            cursor: 'pointer', fontSize: 11,
+          }}>
+            <QrCode size={14} /> 扫码接入钉钉
+          </button>
+        </div>
       )}
 
       {showForm && (
@@ -214,6 +233,23 @@ export default function ChannelConfigComponent({ agentId }: ChannelConfigProps) 
             }}>取消</button>
           </div>
         </div>
+      )}
+
+      {showQrScan && (
+        <QrScanModal
+          channelType={qrScanChannelType}
+          agentId={agentId}
+          onSuccess={(channel) => {
+            loadChannels();
+            setShowQrScan(false);
+          }}
+          onClose={() => setShowQrScan(false)}
+          onManualEntry={() => {
+            setShowQrScan(false);
+            setShowForm(true);
+            setForm({ channel_type: qrScanChannelType, credentials: {} });
+          }}
+        />
       )}
     </div>
   );
