@@ -280,17 +280,53 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
                             {expanded.has('wf-' + wf.entity_id) ? <><ChevronDown size={14} /> 收起</> : <><ChevronRight size={14} /> 展开</>}
                           </div>
                         </div>
-                        {expanded.has('wf-' + wf.entity_id) && wf.buckets?.length > 0 && (
-                          <div style={{ marginTop: 8, height: 140 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={wf.buckets.map((b: any) => ({ time: new Date(b.ts * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), tokens: b.tokens }))}>
-                                <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#888' }} />
-                                <YAxis tick={{ fontSize: 10, fill: '#888' }} />
-                                <Tooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 6, fontSize: 12, color: '#f1f5f9' }} />
-                                <Bar dataKey="tokens" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
+                        {expanded.has('wf-' + wf.entity_id) && (
+                          <>
+                            {wf.buckets?.length > 0 && (
+                              <div style={{ marginTop: 8, height: 140 }}>
+                                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 4 }}>📈 Token 消耗趋势</div>
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart data={wf.buckets.map((b: any) => ({ time: new Date(b.ts * 1000).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), tokens: b.tokens }))}>
+                                    <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#888' }} />
+                                    <YAxis tick={{ fontSize: 10, fill: '#888' }} />
+                                    <Tooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 6, fontSize: 12, color: '#f1f5f9' }} />
+                                    <Bar dataKey="tokens" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+                            )}
+                            {/* 工具命中 + Token 消耗 */}
+                            {wf.tools?.length > 0 && (
+                              <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                <div>
+                                  <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 4 }}>🎯 工具命中次数</div>
+                                  <div style={{ height: 120 }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <BarChart data={wf.tools.map((t: any) => ({ name: t.name, hits: t.hits }))} layout="vertical">
+                                        <XAxis type="number" tick={{ fontSize: 9, fill: '#888' }} />
+                                        <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: '#aaa' }} width={80} />
+                                        <Tooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 6, fontSize: 11, color: '#f1f5f9' }} />
+                                        <Bar dataKey="hits" fill="#a78bfa" radius={[0, 3, 3, 0]} />
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                  </div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 4 }}>💰 工具 Token 消耗</div>
+                                  <div style={{ height: 120 }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <BarChart data={wf.tools.map((t: any) => ({ name: t.name, tokens: t.tokens }))} layout="vertical">
+                                        <XAxis type="number" tick={{ fontSize: 9, fill: '#888' }} />
+                                        <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: '#aaa' }} width={80} />
+                                        <Tooltip contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 6, fontSize: 11, color: '#f1f5f9' }} formatter={(val: any) => [val.toLocaleString(), 'tokens']} />
+                                        <Bar dataKey="tokens" fill="#f59e0b" radius={[0, 3, 3, 0]} />
+                                      </BarChart>
+                                    </ResponsiveContainer>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     ))}
