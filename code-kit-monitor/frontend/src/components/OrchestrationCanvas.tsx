@@ -4,6 +4,7 @@ import {
   Node, Edge,
   MarkerType, Handle, Position, Connection,
   applyNodeChanges, applyEdgeChanges,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Bot, ArrowRight, Circle, ExternalLink } from 'lucide-react';
@@ -104,6 +105,9 @@ function CanvasInner({
   nodes: initialNodes, edges: initialEdges, onNodesChange, onEdgesChange,
   onConnect, onNodeClick, onEdgeClick, onNodeDetailClick, onDrop, readOnly,
 }: Props) {
+  const { fitView } = useReactFlow();
+  const initialFitDone = useRef(false);
+
   // 直接使用 props 作为受控组件
   const nodes = useMemo(() =>
     initialNodes.map((n: any) => ({
@@ -112,6 +116,17 @@ function CanvasInner({
     })),
     [initialNodes, onNodeDetailClick]
   );
+
+  // 首次加载时自动 fitView，确保所有节点在可视范围内（仅执行一次，避免死循环）
+  useEffect(() => {
+    if (!initialFitDone.current && nodes.length > 0) {
+      initialFitDone.current = true;
+      const timer = setTimeout(() => {
+        fitView({ padding: 0.2, duration: 300 });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [nodes.length, fitView]);
 
   const edges = useMemo(() =>
     initialEdges.map((e: any) => ({

@@ -129,6 +129,11 @@ interface YamlRoute {
   description?: string;
 }
 
+/** 稳定的 agent 名称 → node ID 映射，统一使用避免 ID 漂移 */
+export function agentNameToId(name: string): string {
+  return `agent-${name.replace(/[^a-zA-Z0-9一-鿿_-]/g, '_')}`;
+}
+
 export function yamlToTopology(yamlText: string): {
   nodes: Node[];
   edges: Edge[];
@@ -146,9 +151,16 @@ export function yamlToTopology(yamlText: string): {
   const agents: YamlAgent[] = doc.spec.agents || [];
   const routes: YamlRoute[] = doc.spec.routes || [];
 
+  // 构建 name→id 映射，确保稳定性
+  const nameToId = new Map<string, string>();
+  agents.forEach((agent) => {
+    nameToId.set(agent.name, agentNameToId(agent.name));
+  });
+
   agents.forEach((agent, i) => {
+    const nid = agentNameToId(agent.name);
     nodes.push({
-      id: `agent-${i}`,
+      id: nid,
       type: 'orchestrationNode',
       position: agent.position || { x: 50 + i * 250, y: 100 + (i % 2) * 150 },
       data: {
@@ -162,17 +174,24 @@ export function yamlToTopology(yamlText: string): {
     });
   });
 
+  // 边 ID 去重计数
+  const edgeIdCount = new Map<string, number>();
   routes.forEach((route, i) => {
-    const edgeId = `edge-${i}`;
-    const sourceIdx = agents.findIndex((a) => a.name === route.from);
-    const targetIdx = agents.findIndex((a) => a.name === route.to);
-    const source = `agent-${sourceIdx >= 0 ? sourceIdx : 0}`;
-    const target = `agent-${targetIdx >= 0 ? targetIdx : 0}`;
+    const sourceId = nameToId.get(route.from);
+    const targetId = nameToId.get(route.to);
+
+    // 跳过找不到源/目标的无效路由
+    if (!sourceId || !targetId) return;
+
+    const baseEdgeId = `edge-${route.from}-${route.to}`;
+    const count = (edgeIdCount.get(baseEdgeId) || 0) + 1;
+    edgeIdCount.set(baseEdgeId, count);
+    const edgeId = count === 1 ? baseEdgeId : `${baseEdgeId}-${count}`;
 
     edges.push({
       id: edgeId,
-      source,
-      target,
+      source: sourceId,
+      target: targetId,
       type: route.type || 'sequential',
       label: route.type || '顺序',
     });
@@ -215,7 +234,9 @@ export function topologyToYaml(
     position: node.position,
   }));
 
-  const routes = edges.map((edge) => {
+  const routes = edges
+	    .filter((edge) => edge.source !== 'start' && edge.source !== 'end' && edge.target !== 'start' && edge.target !== 'end')
+	    .map((edge) => {
     const fromNode = nodes.find((n) => n.id === edge.source);
     const toNode = nodes.find((n) => n.id === edge.target);
     const config = edgeConfigs.get(edge.id);

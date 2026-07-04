@@ -6,7 +6,7 @@ import EdgeEditor from '../components/EdgeEditor';
 import AgentNodePool from '../components/AgentNodePool';
 import TopologyMonitor from '../components/TopologyMonitor';
 import { useOrchestration, AgentPoolItem } from '../stores/orchestration';
-import { yamlToTopology, topologyToYaml, defaultEdgeConfig, EdgeConfig } from '../lib/orchestration-sync';
+import { yamlToTopology, topologyToYaml, defaultEdgeConfig, EdgeConfig, agentNameToId } from '../lib/orchestration-sync';
 import { Save, RotateCcw, Eye, FileText, FileCode } from 'lucide-react';
 import type { Connection } from '@xyflow/react';
 
@@ -46,6 +46,7 @@ export default function OrchestrationPage() {
   const [loading, setLoading] = useState(false);
   const [activeOrchId, setActiveOrchId] = useState<number | null>(null);
   const [orchName, setOrchName] = useState('my-orchestration');
+  const [syncMsg, setSyncMsg] = useState(''); // 同步/保存反馈
 
   const canvasDirtyRef = useRef(false);
   const yamlDirtyRef = useRef(false);
@@ -114,19 +115,34 @@ export default function OrchestrationPage() {
     setTopologyState({ nodes: topologyState.nodes, edges });
   }, [topologyState.nodes]);
 
-  // 手动同步：画布 → YAML
+  // 手动同步：画布 → YAML（设置脏标记阻止反向覆盖）
   const syncToYaml = () => {
-    const yaml = topologyToYaml(topologyState.nodes, topologyState.edges, edgeConfigs, orchName);
-    setYamlContent(yaml);
+    try {
+      canvasDirtyRef.current = true;
+      const yaml = topologyToYaml(topologyState.nodes, topologyState.edges, edgeConfigs, orchName);
+      setYamlContent(yaml);
+      // 确保 YAML 面板可见
+      if (!showYaml) setShowYaml(true);
+      setSyncMsg('✅ 已同步到 YAML');
+      setTimeout(() => setSyncMsg(''), 2000);
+    } catch (e: any) {
+      console.error('[syncToYaml]', e);
+      setSyncMsg('❌ 同步失败: ' + (e.message || e));
+      setTimeout(() => setSyncMsg(''), 3000);
+    }
   };
 
   const handleConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
-    const edgeId = `edge-${Date.now()}`;
     const sourceNode = topologyState.nodes.find((n: any) => n.id === connection.source);
     const targetNode = topologyState.nodes.find((n: any) => n.id === connection.target);
     const sourceName = sourceNode?.data?.label || connection.source;
     const targetName = targetNode?.data?.label || connection.target;
+
+    // 稳定 edge ID：基于源/目标名称
+    const baseEdgeId = `edge-${sourceName}-${targetName}`;
+    const existingCount = topologyState.edges.filter((e: any) => e.id.startsWith(baseEdgeId)).length;
+    const edgeId = existingCount === 0 ? baseEdgeId : `${baseEdgeId}-${existingCount + 1}`;
 
     const newEdge = {
       id: edgeId, source: connection.source, target: connection.target,
@@ -137,7 +153,7 @@ export default function OrchestrationPage() {
     setTopologyState({ nodes: topologyState.nodes, edges: [...topologyState.edges, newEdge] });
     setEdgeConfig(edgeId, defaultEdgeConfig(edgeId, sourceName, targetName));
     setSelectedEdge(edgeId);
-  }, [topologyState.nodes]);
+  }, [topologyState.nodes, topologyState.edges]);
 
   const handleEdgeClick = useCallback((edgeId: string) => {
     setSelectedEdge(edgeId);
@@ -145,7 +161,10 @@ export default function OrchestrationPage() {
 
   const handleEdgeSave = useCallback((config: EdgeConfig) => {
     setEdgeConfig(config.id, config);
-  }, []);
+    setSelectedEdge(null); // 保存后关闭面板
+    setSyncMsg('✅ 连线配置已保存');
+    setTimeout(() => setSyncMsg(''), 2000);
+  }, [setEdgeConfig, setSelectedEdge]);
   const handleEdgeDelete = useCallback((edgeId: string) => {
     removeEdgeConfig(edgeId);
     const newEdges = topologyState.edges.filter((e: any) => e.id !== edgeId);
@@ -159,7 +178,14 @@ export default function OrchestrationPage() {
   }, [topologyState]);
 
   const handleDrop = useCallback((agent: AgentPoolItem, position: { x: number; y: number }) => {
-    const nodeId = `agent-${Date.now()}`;
+    let nodeId = agentNameToId(agent.name);
+    // 同名节点去重
+    const exists = topologyState.nodes.some((n: any) => n.id === nodeId);
+    if (exists) {
+      let i = 2;
+      while (topologyState.nodes.some((n: any) => n.id === `${nodeId}-${i}`)) i++;
+      nodeId = `${nodeId}-${i}`;
+    }
     const newNode = {
       id: nodeId, type: 'orchestrationNode', position,
       data: { label: agent.name, model: agent.model_name, runtime: agent.runtime, badge: agent.runtime, status: 'not_started', agentId: agent.id },
@@ -170,9 +196,13 @@ export default function OrchestrationPage() {
 
   const handleApply = async () => {
     setLoading(true);
+    // 先同步画布 → YAML 确保提交最新状态，设置脏标记阻止反向覆盖
+    const yaml = topologyToYaml(topologyState.nodes, topologyState.edges, edgeConfigs, orchName);
+    canvasDirtyRef.current = true;
+    setYamlContent(yaml);
     const ecArr: EdgeConfig[] = [];
     edgeConfigs.forEach((v) => ecArr.push(v));
-    const result = await applyYaml(yamlContent, ecArr);
+    const result = await applyYaml(yaml, ecArr);
     setApplyResult(result);
     setLoading(false);
     if (result?.orchestration_id) setActiveOrchId(result.orchestration_id);
@@ -203,6 +233,7 @@ export default function OrchestrationPage() {
           placeholder="编排名称"
         />
         <div style={{ flex: 1 }} />
+        {syncMsg && <span style={{ fontSize: 11, color: syncMsg.startsWith('✅') ? '#5cb878' : '#e05555', fontWeight: 500 }}>{syncMsg}</span>}
         <button onClick={syncToYaml} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 11 }} title="画布改动同步到YAML">
           <Save size={12} /> 同步
         </button>
