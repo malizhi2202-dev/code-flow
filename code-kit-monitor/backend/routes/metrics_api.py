@@ -221,6 +221,61 @@ def api_entity_breakdown_detail(entity_type: str, entity_id: int, minutes: int =
                     })
         result["agents"] = sorted(agent_list, key=lambda x: -x["total_tokens"])
 
+    # 如果是项目，复用项目级分拆逻辑
+    if entity_type == "project":
+        from models.project import Project as Pj
+        pj = db.query(Pj).filter(Pj.id == entity_id).first()
+        if pj:
+            pj_sessions = db.query(SessionMetric).filter(
+                SessionMetric.owner_id == pj.owner_id,
+                SessionMetric.timestamp >= since,
+                SessionMetric.entity_type.in_(["agent", "workflow"]),
+            ).order_by(SessionMetric.timestamp.asc()).all()
+            # 总体 buckets + 工具
+            for s in pj_sessions:
+                ts_b = int(s.timestamp.timestamp()) // 60 * 60
+                buckets[ts_b] = buckets.get(ts_b, 0) + s.total_tokens
+                total_calls += 1
+                if s.tool_name:
+                    if s.tool_name not in tool_info:
+                        tool_info[s.tool_name] = {"name": s.tool_name, "tokens": 0, "hits": 0}
+                    tool_info[s.tool_name]["tokens"] += s.total_tokens
+                    tool_info[s.tool_name]["hits"] += 1
+            result["total_tokens"] = sum(s.total_tokens for s in pj_sessions)
+            result["total_calls"] = len(pj_sessions)
+            result["avg_tokens_per_min"] = round(result["total_tokens"] / max(minutes, 1))
+            result["buckets"] = [{"ts": ts, "tokens": v} for ts, v in sorted(buckets.items())]
+            result["tools"] = sorted(tool_info.values(), key=lambda x: -x["tokens"])
+            # Agent + workflow 分拆
+            ag_info: dict[str, dict] = {}
+            wf_info: dict[str, dict] = {}
+            for s in pj_sessions:
+                eid = str(s.entity_id)
+                if s.entity_type == "agent":
+                    if eid not in ag_info:
+                        ag = db.query(Agent).filter(Agent.id == s.entity_id).first()
+                        ag_info[eid] = {"entity_id": s.entity_id, "name": ag.name if ag else f"Agent#{s.entity_id}", "total_tokens": 0, "calls": 0, "buckets_map": {}}
+                    ag_info[eid]["total_tokens"] += s.total_tokens
+                    ag_info[eid]["calls"] += 1
+                    ts2 = int(s.timestamp.timestamp()) // 60 * 60
+                    ag_info[eid]["buckets_map"][ts2] = ag_info[eid]["buckets_map"].get(ts2, 0) + s.total_tokens
+                elif s.entity_type == "workflow":
+                    if eid not in wf_info:
+                        wf = db.query(Workflow).filter(Workflow.id == s.entity_id).first()
+                        wf_info[eid] = {"entity_id": s.entity_id, "name": wf.name if wf else f"WF#{s.entity_id}", "total_tokens": 0, "calls": 0, "buckets_map": {}}
+                    wf_info[eid]["total_tokens"] += s.total_tokens
+                    wf_info[eid]["calls"] += 1
+                    ts2 = int(s.timestamp.timestamp()) // 60 * 60
+                    wf_info[eid]["buckets_map"][ts2] = wf_info[eid]["buckets_map"].get(ts2, 0) + s.total_tokens
+            for info in ag_info.values():
+                bm = info.pop("buckets_map", {})
+                info["buckets"] = [{"ts": ts, "tokens": v} for ts, v in sorted(bm.items())]
+            for info in wf_info.values():
+                bm = info.pop("buckets_map", {})
+                info["buckets"] = [{"ts": ts, "tokens": v} for ts, v in sorted(bm.items())]
+            result["agents"] = sorted(ag_info.values(), key=lambda x: -x["total_tokens"])
+            result["workflows"] = sorted(wf_info.values(), key=lambda x: -x["total_tokens"])
+
     return result
 
 

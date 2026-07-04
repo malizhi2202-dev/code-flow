@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Play, Square, RefreshCw, BarChart3, FileText, GitBranch, Bot, Clock, MessageSquare, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Play, Square, RefreshCw, BarChart3, FileText, GitBranch, Bot, Clock, MessageSquare, ExternalLink, ChevronDown, ChevronRight, Network } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useProjects } from '../stores/projects';
 import { useAgents } from '../stores/agents';
 import { useWorkflows } from '../stores/workflows';
 import { useMetrics } from '../stores/metrics';
 import ChatWindow from '../components/ChatWindow';
+import EntityBreakdownPanel from '../components/EntityBreakdownPanel';
 
 interface Props { projectId: number; onBack: () => void; onNavigateAgent?: (agent: any) => void; }
 
@@ -24,6 +25,7 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
   // Agent tab: 消耗数据 + 会话
   const [breakdown, setBreakdown] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [orchInfo, setOrchInfo] = useState<any>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sessPage, setSessPage] = useState(1);
 
@@ -34,6 +36,14 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
       const uid = localStorage.getItem('current_user_id') || 'admin';
       fetch('/api/metrics/project/' + projectId + '/breakdown?minutes=60', { headers: { 'X-User-Id': uid } })
         .then(r => r.json()).then(d => setBreakdown(d)).catch(() => setBreakdown(null));
+      // 编排组信息
+      if (project?.orchestration_id) {
+        fetch('/api/orchestration', { headers: { 'X-User-Id': uid } })
+          .then(r => r.json()).then(d => {
+            const orch = (Array.isArray(d) ? d : (d.instances || [])).find((o: any) => o.id === project.orchestration_id);
+            setOrchInfo(orch || null);
+          }).catch(() => setOrchInfo(null));
+      }
       fetch('/api/metrics/sessions?entity_type=agent&limit=50&minutes=1440', { headers: { 'X-User-Id': uid } })
         .then(r => r.json()).then(d => {
           const all = (d.sessions || []).filter((s: any) => s.entity_type === 'agent' && s.owner_id === (project?.owner_id));
@@ -226,6 +236,32 @@ export default function ProjectDetail({ projectId, onBack, onNavigateAgent }: Pr
                 )}
               </div>
             </div>
+
+            {/* 编排组信息 */}
+            {orchInfo && (
+              <div style={panel}>
+                <h3 style={sectionTitle}>
+                  <Network size={14} color="#a855f7" style={{ marginRight: 6 }} />
+                  绑定编排组
+                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{orchInfo.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
+                      {orchInfo.status} · {orchInfo.agent_count} Agents · 优先级 {orchInfo.priority}
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: 10, padding: '2px 8px', borderRadius: 3,
+                    background: orchInfo.status === 'converging' ? 'rgba(92,184,120,0.15)' : 'rgba(232,164,80,0.15)',
+                    color: orchInfo.status === 'converging' ? '#5cb878' : '#e8a450',
+                  }}>{orchInfo.status}</span>
+                </div>
+              </div>
+            )}
+
+            {/* 项目级监控面板 */}
+            <EntityBreakdownPanel entityType="project" entityId={projectId} entityName={project?.name || '项目'} />
 
             {/* 消耗监控 */}
             <div style={panel}>
