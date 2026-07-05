@@ -5,6 +5,7 @@ __pycache__/
 code-kit
 backup
 .hermes.md
+STATE.md
 package-lock.json
 platform.db
 users.json
