@@ -1,2 +1,10 @@
 __pycache__/
 *.pyc
+.venv
+.claude
+code-kit
+backup
+.hermes.md
+package-lock.json
+platform.db
+users.json
