@@ -25,3 +25,11 @@ def log_audit(user_id: str, user_name: str, action: str, target: str, target_typ
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    # 通知探针系统
+    try:
+        from services.agent_probe_service import _notify_activity
+        _notify_activity(target_type, int(target) if target.isdigit() else 0,
+                        user_id, "success" if result == "success" else "failed",
+                        action=action)
+    except Exception:
+        pass

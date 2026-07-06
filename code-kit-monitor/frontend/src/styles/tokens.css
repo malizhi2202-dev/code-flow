@@ -62,6 +62,31 @@
   --node-glow-healthy: 0 0 6px rgba(92,184,120,0.3);
   --node-glow-failed: 0 0 8px rgba(224,85,85,0.4);
   --grid-dot: rgba(255,255,255,0.03);
+
+  /* ── Agent 管控面 (Control Plane) ── */
+  /* 状态指示灯 */
+  --cp-status-idle:    oklch(0.65 0.19 155);   /* 空闲 */
+  --cp-status-running: oklch(0.72 0.16 85);    /* 运行中 */
+  --cp-status-blocked: oklch(0.58 0.22 25);    /* 阻塞 */
+  --cp-status-dead:    oklch(0.55 0.01 260);   /* 死亡/离线 */
+  --cp-status-failed:  oklch(0.55 0.22 20);    /* 失败 */
+
+  /* 探针时间线 */
+  --cp-probe-pass: oklch(0.65 0.19 155);       /* 探针通过 */
+  --cp-probe-fail: oklch(0.58 0.22 25);        /* 探针失败 */
+
+  /* 修复级别 */
+  --cp-repair-safe:     oklch(0.65 0.19 155);   /* safe */
+  --cp-repair-caution:  oklch(0.72 0.16 85);    /* caution */
+  --cp-repair-dangerous: oklch(0.55 0.22 20);   /* dangerous */
+
+  /* 调度器 */
+  --cp-queue-pending:  oklch(0.72 0.16 85);     /* 排队中 */
+  --cp-queue-assigned: oklch(0.62 0.18 255);    /* 已分配 */
+
+  /* 详情面板 */
+  --cp-detail-width: 420px;
+  --cp-detail-bg: oklch(0.16 0.01 260);
 }
 
 /* ── 全局 ── */
