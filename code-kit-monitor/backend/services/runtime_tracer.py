@@ -39,6 +39,13 @@ class RuntimeTracer:
                 status=status, timestamp=datetime.datetime.utcnow()
             )
             db.add(agg)
+            # 通知探针系统（被动收集执行数据）
+            try:
+                from services.agent_probe_service import _notify_activity
+                _notify_activity(entity_type, entity_id, owner_id, status,
+                                duration_ms, total, action=tool_name)
+            except Exception:
+                pass
             db.commit()
         finally:
             db.close()
