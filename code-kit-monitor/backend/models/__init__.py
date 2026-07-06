@@ -24,3 +24,6 @@ from models.orchestration import (  # noqa: E402, F401
     SchedulingQueue,
     TraceSpan,
 )
+from models.agent_probe import AgentProbe  # noqa: E402, F401
+from models.scheduler_queue import SchedulerQueue  # noqa: E402, F401
+from models.domain import Domain  # noqa: E402, F401

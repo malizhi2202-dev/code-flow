@@ -17,6 +17,7 @@ class Agent(Base):
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
     model_config_json: Mapped[dict] = mapped_column(JSON, default=dict)
     api_key_encrypted: Mapped[str] = mapped_column(String(512), nullable=False)
+    domain_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("domains.id", ondelete="SET NULL"), nullable=True)
     workflow_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workflows.id"), nullable=True)
     workflow_ids: Mapped[dict] = mapped_column(JSON, default=list)  # [1, 2, 3] 绑定多个工作流
     token_soft_limit: Mapped[int] = mapped_column(Integer, default=800000)
@@ -43,6 +44,7 @@ class Agent(Base):
             "total_tokens_used": self.total_tokens_used,
             "gate_pre_check": self.gate_pre_check, "gate_post_check": self.gate_post_check, "io_filter": self.io_filter,
             "status": self.status, "visibility": self.visibility,
+            "domain_id": self.domain_id,
             "project_count": self.project_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

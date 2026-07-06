@@ -17,6 +17,13 @@ def _uid(request: Request) -> str:
     return _user(request).get("id", "admin")
 
 
+def _get_agent_domain_id(agent_id: int, db: Session) -> int | None:
+    """获取 agent 的 domain_id，用于记忆隔离."""
+    from models.agent import Agent
+    ag = db.query(Agent).filter(Agent.id == agent_id).first()
+    return ag.domain_id if ag else None
+
+
 # ═══════════════════════════════════════════
 # 资料源 CRUD
 # ═══════════════════════════════════════════
@@ -157,14 +164,22 @@ def list_memories(
     session_id: str | None = None,
     memory_type: str | None = None,
     key: str | None = None,
+    domain_id: int | None = None,
     limit: int = 50,
 ):
-    """获取 Agent 的记忆列表，支持按渠道/会话/类型/key 过滤."""
+    """获取 Agent 的记忆列表，支持按渠道/会话/类型/key/域过滤."""
     owner_id = _uid(request)
     q = db.query(AgentMemory).filter(
         AgentMemory.agent_id == agent_id,
         AgentMemory.owner_id == owner_id,
     )
+    # 域隔离：优先用参数 domain_id，否则自动从 agent 获取
+    if domain_id is not None:
+        q = q.filter(AgentMemory.domain_id == domain_id)
+    else:
+        ag_domain = _get_agent_domain_id(agent_id, db)
+        if ag_domain is not None:
+            q = q.filter(AgentMemory.domain_id == ag_domain)
     if channel:
         q = q.filter(AgentMemory.channel == channel)
     if session_id:
@@ -211,6 +226,11 @@ def upsert_memory(agent_id: int, payload: dict, request: Request, db: Session = 
     value = payload["value"] if isinstance(payload["value"], str) else _json.dumps(payload["value"], ensure_ascii=False)
     ttl = payload.get("ttl_seconds")
 
+    # 自动获取 domain_id（优先使用 payload 中的，否则从 agent 获取）
+    dom_id = payload.get("domain_id")
+    if dom_id is None:
+        dom_id = _get_agent_domain_id(agent_id, db)
+
     # upsert: 同 agent + key 去重
     existing = db.query(AgentMemory).filter(
         AgentMemory.agent_id == agent_id,
@@ -222,6 +242,7 @@ def upsert_memory(agent_id: int, payload: dict, request: Request, db: Session = 
         existing.value = value
         existing.channel = channel
         existing.memory_type = mtype
+        existing.domain_id = dom_id
         existing.priority = payload.get("priority", existing.priority)
         existing.ttl_seconds = ttl
         existing.expires_at = (datetime.datetime.utcnow() + datetime.timedelta(seconds=ttl)) if ttl else None
@@ -232,6 +253,7 @@ def upsert_memory(agent_id: int, payload: dict, request: Request, db: Session = 
         mem = AgentMemory(
             agent_id=agent_id,
             owner_id=owner_id,
+            domain_id=dom_id,
             channel=channel,
             session_id=payload.get("session_id"),
             key=key,
@@ -266,12 +288,16 @@ def delete_memory(agent_id: int, memory_id: int, request: Request, db: Session =
 
 @router.get("/{agent_id}/memory/channels")
 def memory_channels(agent_id: int, request: Request, db: Session = Depends(get_db)):
-    """获取该 Agent 的跨渠道记忆统计."""
+    """获取该 Agent 的跨渠道记忆统计（按域隔离）."""
     owner_id = _uid(request)
-    memories = db.query(AgentMemory).filter(
+    q = db.query(AgentMemory).filter(
         AgentMemory.agent_id == agent_id,
         AgentMemory.owner_id == owner_id,
-    ).all()
+    )
+    ag_domain = _get_agent_domain_id(agent_id, db)
+    if ag_domain is not None:
+        q = q.filter(AgentMemory.domain_id == ag_domain)
+    memories = q.all()
     stats = {}
     for m in memories:
         ch = m.channel
@@ -297,6 +323,14 @@ def search_memory(agent_id: int, payload: dict, request: Request, db: Session = 
         AgentMemory.agent_id == agent_id,
         AgentMemory.owner_id == owner_id,
     )
+    # 域隔离
+    dom_id = payload.get("domain_id")
+    if dom_id is not None:
+        q = q.filter(AgentMemory.domain_id == dom_id)
+    else:
+        ag_domain = _get_agent_domain_id(agent_id, db)
+        if ag_domain is not None:
+            q = q.filter(AgentMemory.domain_id == ag_domain)
     if channel:
         q = q.filter(AgentMemory.channel == channel)
     if mtype:
@@ -319,4 +353,63 @@ def search_memory(agent_id: int, payload: dict, request: Request, db: Session = 
         "query": q_text,
         "results": [m.to_dict() for m in results],
         "total": len(results),
+    }
+
+
+# ═══════════════════════════════════════════
+# A1: 加载记忆 — 为 Agent 的能力组加载最近记忆
+# ═══════════════════════════════════════════
+
+@router.post("/{agent_id}/load-memory")
+def load_recent_memories(agent_id: int, payload: dict | None = None, request: Request = None, db: Session = Depends(get_db)):
+    """加载 Agent 能力组的最近记忆（同 domain_id + 重叠 capabilities）."""
+    import json as _json
+    from models.agent import Agent
+    from datetime import datetime, timedelta
+
+    owner_id = _uid(request)
+    limit = (payload or {}).get("limit", 20)
+    days = (payload or {}).get("days", 7)
+
+    ag = db.query(Agent).filter(Agent.id == agent_id, Agent.owner_id == owner_id).first()
+    if not ag:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+
+    recent_since = datetime.utcnow() - timedelta(days=days)
+    capabilities = (ag.model_config_json or {}).get("capabilities", [])
+
+    # 同 domain_id（含 null）的最近记忆
+    mem_q = db.query(AgentMemory).filter(
+        AgentMemory.owner_id == owner_id,
+        AgentMemory.created_at >= recent_since,
+    )
+    if ag.domain_id is not None:
+        mem_q = mem_q.filter(
+            (AgentMemory.domain_id == ag.domain_id) | (AgentMemory.domain_id.is_(None))
+        )
+    else:
+        mem_q = mem_q.filter(AgentMemory.domain_id.is_(None))
+
+    loaded_memories = mem_q.order_by(
+        AgentMemory.priority.desc(), AgentMemory.created_at.desc()
+    ).limit(limit).all()
+
+    # 按 capability 过滤：记忆的 key/value 包含 capability 关键词
+    if capabilities:
+        filtered = []
+        for m in loaded_memories:
+            search_text = (m.key + " " + (m.value or "")).lower()
+            for cap in capabilities:
+                if cap.lower() in search_text:
+                    filtered.append(m)
+                    break
+        loaded_memories = filtered
+
+    results = [m.to_dict() for m in loaded_memories]
+    return {
+        "agent_id": agent_id,
+        "domain_id": ag.domain_id,
+        "capabilities": capabilities,
+        "memories": results,
+        "loaded_count": len(results),
     }

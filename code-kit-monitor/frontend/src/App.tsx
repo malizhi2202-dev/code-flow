@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, GitBranch, Users, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon, AlertCircle, Wrench, Bot, Network, FolderKanban, BarChart3, Link2, MessageSquare } from 'lucide-react';
+import { Activity, GitBranch, Users, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon, AlertCircle, Wrench, Bot, Network, FolderKanban, BarChart3, Link2, MessageSquare, Radio } from 'lucide-react';
 import Home from './pages/Home';
 import Detail from './pages/Detail';
 import Roles from './pages/Roles';
@@ -22,6 +22,7 @@ import AgentBuilder from './pages/AgentBuilder';
 import AgentDetail from './pages/AgentDetail';
 import OrchestrationPage from './pages/OrchestrationPage';
 import OrchestrationListPage from './pages/OrchestrationListPage';
+import AgentControlPlane from './pages/AgentControlPlane';
 import OrchDocPage from './pages/OrchDocPage';
 import TemplateMarket from './pages/TemplateMarket';
 import MonitoringDashboard from './pages/MonitoringDashboard';
@@ -49,6 +50,7 @@ const NAV: NavItem[] = [
   { id: 'roles-page', label: '角色', icon: <Users size={16} /> },
   { id: 'agents', label: 'Agent', icon: <Bot size={16} /> },
   { id: 'chat', label: '💬 对话中心', icon: <MessageSquare size={16} /> },
+  { id: 'control-plane', label: 'Agent 管控', icon: <Radio size={16} /> },
   { id: 'orchestration', label: '编排', icon: <Network size={16} /> },
   { id: 'monitor', label: '监控', icon: <BarChart3 size={16} /> },
   { id: 'projects', label: '项目', icon: <FolderKanban size={16} /> },
@@ -72,6 +74,7 @@ type View =
   | { page: 'roles-page' }
   | { page: 'agents' }
   | { page: 'orchestration' }
+  | { page: 'control-plane' }
   | { page: 'monitor' }
   | { page: 'projects' }
   | { page: 'users' }
@@ -208,6 +211,7 @@ export default function App() {
       case 'roles-page': return perm('project:read') ? <RoleMarket onSelectRole={(r) => setRoleDetail(r)} /> : <EmptyPerm />;
       case 'agents': return perm('project:read') ? <AgentBuilder onSelect={(a) => setAgentDetail(a)} /> : <EmptyPerm />;
       case 'chat': return perm('project:read') ? <ConversationCenter /> : <EmptyPerm />;
+      case 'control-plane': return <AgentControlPlane />;
       case 'orchestration': {
         if (!perm('project:write')) return <EmptyPerm />;
         const path = window.location.pathname;

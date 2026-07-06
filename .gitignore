@@ -1,2 +1,12 @@
 __pycache__/
 *.pyc
+.venv
+.claude
+code-kit
+backup
+.hermes.md
+STATE.md
+package-lock.json
+platform.db
+users.json
+STATE.md

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from models import Base
 
 CHANNELS = ["web", "feishu", "dingtalk", "wechat_work", "api", "slack", "telegram"]
-MEMORY_TYPES = ["preference", "fact", "conversation", "context"]
+MEMORY_TYPES = ["preference", "fact", "conversation", "context", "decision"]
 
 
 class AgentMemory(Base):
@@ -15,11 +15,12 @@ class AgentMemory(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     agent_id: Mapped[int] = mapped_column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
     owner_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    domain_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("domains.id", ondelete="SET NULL"), nullable=True, index=True)
     channel: Mapped[str] = mapped_column(String(32), nullable=False, default="web")  # web/feishu/dingtalk/wechat_work/api/slack/telegram
     session_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     key: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
     value: Mapped[str] = mapped_column(Text, nullable=False)  # JSON string
-    memory_type: Mapped[str] = mapped_column(String(32), nullable=False, default="fact")  # preference/fact/conversation/context
+    memory_type: Mapped[str] = mapped_column(String(32), nullable=False, default="fact")  # preference/fact/conversation/context/decision
     priority: Mapped[int] = mapped_column(Integer, default=5)  # 1-10, 检索优先级
     ttl_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)  # null=永不过期
     expires_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
@@ -34,6 +35,7 @@ class AgentMemory(Base):
             v = self.value
         return {
             "id": self.id, "agent_id": self.agent_id, "owner_id": self.owner_id,
+            "domain_id": self.domain_id,
             "channel": self.channel, "session_id": self.session_id,
             "key": self.key, "value": v, "memory_type": self.memory_type,
             "priority": self.priority, "ttl_seconds": self.ttl_seconds,
