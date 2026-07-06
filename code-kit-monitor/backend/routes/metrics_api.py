@@ -59,6 +59,63 @@ def _model_totals(sessions) -> dict:
     return dict(sorted(mt.items(), key=lambda x: -x[1]))
 
 
+# ── B7: Agent 模型 API 速率限制（必须在 /{entity_type}/{entity_id} 之前注册）──
+
+@router.get("/agent/{agent_id}")
+def api_agent_rate_limits(agent_id: int, request: Request = None, db: Session = Depends(get_db)):
+    """返回指定 Agent 的模型 API 速率限制信息."""
+    from models.agent import Agent
+    from datetime import datetime, timedelta
+
+    ag = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not ag:
+        raise HTTPException(status_code=404, detail="Agent 不存在")
+
+    # 计算最近 1 分钟的 token 消耗速率
+    from models.metrics import SessionMetric
+    since = datetime.utcnow() - timedelta(minutes=1)
+    recent = db.query(SessionMetric).filter(
+        SessionMetric.entity_type == "agent",
+        SessionMetric.entity_id == agent_id,
+        SessionMetric.timestamp >= since,
+    ).all()
+
+    recent_tokens = sum(s.total_tokens or 0 for s in recent)
+    recent_calls = len(recent)
+
+    # 计算最近 1 小时的消耗
+    hour_since = datetime.utcnow() - timedelta(hours=1)
+    hour_sessions = db.query(SessionMetric).filter(
+        SessionMetric.entity_type == "agent",
+        SessionMetric.entity_id == agent_id,
+        SessionMetric.timestamp >= hour_since,
+    ).all()
+    hour_tokens = sum(s.total_tokens or 0 for s in hour_sessions)
+    hour_calls = len(hour_sessions)
+
+    return {
+        "agent_id": agent_id,
+        "agent_name": ag.name,
+        "model_provider": ag.model_provider,
+        "model_name": ag.model_name,
+        "limits": {
+            "token_soft_limit": ag.token_soft_limit,
+            "token_hard_limit": ag.token_hard_limit,
+            "total_tokens_used": ag.total_tokens_used,
+            "remaining": max(0, ag.token_hard_limit - ag.total_tokens_used),
+            "usage_percent": round(ag.total_tokens_used / max(1, ag.token_hard_limit) * 100, 1),
+        },
+        "rate_1min": {
+            "tokens": recent_tokens,
+            "calls": recent_calls,
+        },
+        "rate_1hour": {
+            "tokens": hour_tokens,
+            "calls": hour_calls,
+        },
+    }
+
+
 @router.get("/{entity_type}/{entity_id}")
 def api_get_metrics(entity_type: str, entity_id: int, minutes: int = 60, request: Request = None, db: Session = Depends(get_db)):
     return get_metrics(db, entity_type, entity_id, minutes)
@@ -609,3 +666,20 @@ def api_queue_depth(request: Request = None, db: Session = Depends(get_db)):
         "avg_wait_seconds": round(sum(wait_times) / len(wait_times), 1) if wait_times else 0,
         "max_wait_seconds": round(max(wait_times), 1) if wait_times else 0,
     }
+
+
+# ═══════════════════════════════════════════
+# B6: 主机资源指标
+# ═══════════════════════════════════════════
+
+@router.get("/host")
+def api_host_metrics(request: Request = None):
+    """返回主机 CPU/内存/磁盘指标（psutil）."""
+    try:
+        from services.host_metrics import get_host_metrics
+        metrics = get_host_metrics()
+        return {"status": "ok", "metrics": metrics}
+    except ImportError:
+        return {"status": "error", "detail": "psutil 未安装，请执行: pip install psutil"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}

@@ -357,3 +357,227 @@ trace_model_call()  → 执行事件（LLM 调用/性能/Token）    → metrics
 | `routes/control_plane_api.py` | +10 | `?entity_type=` 过滤参数 |
 
 **总计：3 个文件，约 40 行新增，不动任何现有接口。**
+
+
+---
+
+## 11. K8s 架构思想映射 · Agent 管控平台演进（四轮专家共识 · 2026-07-06）
+
+> 本段记录 K8s 六个核心设计范式在 Agent 世界中的等价映射方案。
+> 不是照搬 K8s 部署架构，而是借鉴其**分层管控、声明式状态、自动修复、弹性伸缩**思想。
+
+### 11.1 K8s → Agent 概念映射
+
+| K8s 概念 | K8s 做什么 | Agent 世界等价物 | 落地状态 |
+|---|---|---|---|
+| **Node** | 物理/虚拟机器，运行 kubelet | Agent 实例 + 宿主机资源 | Agent 表已有 |
+| **Pod** | 容器组，共享网络/存储 | Gateway/同 capability Agent 组 | 需新增 |
+| **Deployment** | 期望副本数管理，滚动更新 | 管控模块：启停 + 渐进式扩容 | Reconcile Loop 有架子 |
+| **Scheduler** | Filter + Score → 选最优 Node | 标签匹配 + Least Connection → 选最优 Agent | `scheduler_service` 已有 |
+| **Service/Ingress** | 服务发现 + 负载均衡 + 流量入口 | 网关 Agent + 语义路由 | 需新增 |
+| **etcd** | 集群状态存储，Watch 机制 | `agent_memories` + `agent_probes` 表 | 已有 |
+| **HPA** | CPU > 80% → 自动加 Pod | Token 耗尽/排队 > N → 渐进式扩容 | 需新增 |
+
+### 11.2 分层监控模型
+
+```
+机器层 → Gateway 层 → Agent 层 → Skill 层 → 模型层
+ CPU%     Token总量    Token/并发   耗时/成功率   API latency
+ 内存     并发Agent数  任务队列深度  被调用次数    rate limit
+ 网络IO   路由命中率   平均耗时                    key 有效期
+```
+
+| 层 | 数据源 | 现有 |
+|---|---|---|
+| 机器层（CPU/内存/网络） | `psutil`（需新增） | ❌ |
+| Gateway 层（Token 总量/并发数） | 网关自身计数（需新增） | ❌ |
+| Agent 层（Token/并发/耗时） | `session_metrics` + `metrics_raw` | ✅ |
+| Skill 层（耗时/成功率） | `trace_tool_call` | ✅ |
+| 模型层（API latency/rate limit） | LLM API 响应头（需新增） | ❌ |
+
+### 11.3 架构演进路线
+
+| 阶段 | 内容 | 依赖 |
+|---|---|---|
+| **第一波**（本周） | 服务发现 + 内部状态表 + 调度器增强 | 现有代码 80% |
+| **第二波**（下周） | 网关 Agent（标签路由 + 转发）+ 全栈监控 | 第一波 |
+| **第三波**（下月） | 弹性伸缩（渐进式扩容 + 副本管理） | 第二波 + 记忆系统 |
+
+### 11.4 记忆系统设计（Agent 状态一致性）
+
+> 问题：弹性伸缩时新 Agent 副本如何获得已有 Agent 的上下文？
+
+**方案**：共享内存模式，复用现有 `agent_memories` 表。
+
+```
+Agent A 执行完 → 写记忆: {key:"auth.py:review", value:"L42 SQL注入", type:"decision"}
+新 Agent B 启动  → 读记忆: 同 owner_id + 同 capability + 最近 N 条
+                 → 状态对齐
+```
+
+| 共享（读） | 不共享（隔离） |
+|---|---|
+| 审查结论、项目上下文、代码缓存 | 对话历史、API key、用户身份 |
+| 能力标签 | Token 配额 |
+
+| 操作 | 权限 |
+|---|---|
+| 读同 capability 记忆 | 自动（限于同 owner_id） |
+| 写执行结论 | Agent 执行完成后自动 |
+| 人工修正/删除 | admin |
+| 跨 capability 读 | ❌ 禁止 |
+
+### 11.5 网关安全模型
+
+| 安全层 | Agent 网关 |
+|---|---|
+| 认证 | `X-User-Id` header（沿用） |
+| 授权 | 用户只能路由到自己的 Agent |
+| 限流 | 网关层限流 |
+| 审计 | `log_audit` 记录每次路由 |
+| 加密 | API key 已加密 |
+
+**网关红线**：不读任务内容、不缓存响应、不改写内容。
+
+### 11.6 弹性伸缩 = 渐进式扩容
+
+Agent 有状态（上下文/缓存），不能像 K8s Pod 无状态复制。
+
+```
+触发条件: 同 capability Agent 排队长 > N
+动作:     创建新 Agent 副本
+策略:     新任务 → 新副本；旧任务在原 Agent 完成
+区别:     类似 StatefulSet，非 Deployment
+```
+
+### 11.7 实施入口
+
+下次会话入口：`@code-kit/GO.md` →「继续 agent-control-plane，实施 11.1-11.6 架构演进」
+
+---
+
+## 12. 隔离域（Domain）设计 · 2026-07-06
+
+> K8s 的 Namespace 不是「一个应用」，而是「一个逻辑隔离边界」。
+> Agent 管控引入相同概念：**Domain（隔离域）**。
+
+### 12.1 概念层级
+
+```
+全局管控面
+  └─ 隔离域 A（团队/环境/客户）
+  │    ├─ Agent 组（同 capability）
+  │    │    └─ 单 Agent 实例
+  │    ├─ 域内路由规则
+  │    └─ 域内共享配置/记忆
+  │
+  └─ 隔离域 B
+       └─ ...
+```
+
+业务项目（code-kit-monitor、ai-dev-platform 等）在域内自由绑定 Agent 和 Workflow。
+
+### 12.2 隔离规则
+
+| 规则 | 说明 |
+|---|---|
+| 同域内 Agent 自动互相发现 | 按 capability 标签匹配 |
+| 同域内自动路由 | 负载均衡到同 capability 最空闲 Agent |
+| 跨域默认隔离 | 不可见，不可调用 |
+| 跨域调用需显式配置 | 类似 K8s NetworkPolicy |
+
+### 12.3 每个域内的完整能力闭环
+
+- ✅ Agent 可伸缩（创建/停用/销毁）
+- ✅ 记忆系统保持状态（etcd 等价）
+- ✅ 同域内自动服务发现
+- ✅ 调度器按策略选择最空闲 Agent
+- ✅ 负载均衡可视化
+- ✅ Reconcile Loop 自愈重启
+- ✅ 分层监控
+- ✅ 跨域隔离、域内互通
+
+### 12.4 前端递进式 UI
+
+```
+📊 管控面总览
+  ├─ 跨域概览卡片
+  │
+  └─ 📁 隔离域列表
+       └─ 点击进入某个域
+            ├─ 🤖 Agent 组（按 capability 分，可折叠）
+            │    └─ 展开 → Agent 实例列表
+            │         └─ 点击 → 探针详情 + Skill 耗时
+            ├─ 🔀 域内路由规则
+            └─ ⚙️ 调度策略
+
+
+---
+
+## 13. 三波实施方案（架构门共识 · 2026-07-06）
+
+> 后端骨架在但每个能力有缺口，分三波渐进落地。
+
+### 13.1 第一波：隔离域（Domain）
+
+只做域的概念落地——Agent 按域分组，域间互不可见。
+
+```
+新增: domains 表 (id, name, owner_id)
+改造: agents 表加 domain_id 字段
+改造: 管控面 API 加 ?domain_id= 过滤
+改造: 前端按 domain 分层展示
+```
+
+### 13.2 第二波：域内自动化
+
+```
+新增: Agent 注册时自动分配 domain
+改造: 调度器接入探针状态 → 选最空闲 Agent
+改造: Reconcile Loop 接入自动重启 (探针→Reconcile→重启)
+新增: 前端负载均衡面板（同 capability Agent 的负载可视化）
+```
+
+### 13.3 第三波：弹性伸缩 + 记忆 + 全栈监控
+
+```
+新增: 渐进式扩容（排队超阈值 → 自动创建副本）
+改造: agent_memories 接入 Agent 启动流程（启动时加载同域记忆）
+新增: psutil 机器层采集
+新增: 模型 API rate limit 采集
+```
+
+### 13.4 待决定的设计点
+
+| 决策点 | 选项 |
+|---|---|
+| Agent 归属域 | A:手动选 / B:继承创建者默认域 / C:按 capability 自动匹配 |
+| 域层级 | v1 平级 / v2 父子关系 |
+| 域内记忆 | 全共享 / 按 capability 隔离 |
+| 跨域调用 | 需显式 allow_outbound 配置 |
+
+### 13.5 域安全模型
+
+| 规则 | 说明 |
+|---|---|
+| 域 = NetworkPolicy | 不是 RBAC，是网络层隔离 |
+| Agent 注册 | 只能注册到有权访问的域 |
+| 跨域调用 | 域配置显式 allow_outbound |
+| admin 视角 | 可切换域，非默认全局可见 |
+
+### 13.6 实施入口
+
+下次会话：`@code-kit/GO.md` →「继续 agent-control-plane，第一波实施隔离域」
+
+---
+
+## 14. 新模块设计方向（待讨论 · 2026-07-06）
+
+在管控面内新建模块，实践 K8s 架构思想。两种方案并存：
+
+| 方案 | 使用场景 | 设计要点 |
+|---|---|---|
+| **通用 Agent** | 开箱即用，一个 Agent 自动路由到同 capability 最空闲实例 | 网关统一入口，用户不感知底层 Agent 池 |
+| **编排 Agent** | 精细控制，用户定义 YAML 拓扑 → 管控模块调度 | 复用现有编排画布 + 新增域内调度策略 |
+
+> 两种方案保留，不互斥。下次专家团专门讨论架构设计。

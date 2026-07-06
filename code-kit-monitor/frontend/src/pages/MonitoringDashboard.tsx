@@ -50,6 +50,87 @@ function EntityTable({ title, items, color }: { title: string; items?: EntityIte
   );
 }
 
+// ── B8: 主机指标卡片 ──
+function HostMetricsCard({ host }: { host: any }) {
+  if (!host) return null;
+  var m = host.metrics || {};
+  var bars = [
+    { label: 'CPU', pct: m.cpu_percent || 0, color: '#548cf0' },
+    { label: '内存', pct: m.memory_percent || 0, color: '#5cb878' },
+    { label: '磁盘', pct: m.disk_percent || 0, color: '#e8a450' },
+  ];
+  return (
+    <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 20, border: '1px solid var(--border)', marginBottom: 16 }}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px 0', color: 'var(--blue)' }}>🖥 主机资源</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        {bars.map(function(b) {
+          return (
+            <div key={b.label}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{b.label}</span>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: b.color, fontWeight: 600 }}>{b.pct}%</span>
+              </div>
+              <div style={{ height: 8, background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: b.pct + '%', background: b.color, borderRadius: 4, transition: 'width 0.5s' }} />
+              </div>
+              {b.label === '内存' && m.memory_used_gb !== undefined && (
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2 }}>
+                  {m.memory_used_gb} / {m.memory_total_gb} GB
+                </div>
+              )}
+              {b.label === '磁盘' && m.disk_used_gb !== undefined && (
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2 }}>
+                  {m.disk_used_gb} / {m.disk_total_gb} GB
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── B8: Agent 指标卡片 ──
+function AgentMetricsCard({ agents, onSelectAgent }: { agents: any[]; onSelectAgent: (id: number) => void }) {
+  if (!agents || agents.length === 0) return null;
+  return (
+    <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 16, border: '1px solid var(--border)', marginBottom: 16 }}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px 0', color: '#b47cd8' }}>🤖 Agent 模型速率</h3>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead><tr style={{ borderBottom: '1px solid var(--border)' }}>
+            <th style={th}>Agent</th>
+            <th style={{ ...th, textAlign: 'right' }}>Token 已用</th>
+            <th style={{ ...th, textAlign: 'right' }}>剩余</th>
+            <th style={th}>用量</th>
+          </tr></thead>
+          <tbody>
+            {agents.map(function(a) {
+              var usagePct = a.token_hard_limit > 0 ? Math.round(a.total_tokens_used / a.token_hard_limit * 100) : 0;
+              var remaining = Math.max(0, (a.token_hard_limit || 0) - (a.total_tokens_used || 0));
+              var color = usagePct > 80 ? 'var(--red)' : usagePct > 50 ? 'var(--orange)' : 'var(--green)';
+              return (
+                <tr key={a.id} style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={function() { onSelectAgent(a.id); }}>
+                  <td style={td}>{a.name}</td>
+                  <td style={{ ...td, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>{(a.total_tokens_used || 0).toLocaleString()}</td>
+                  <td style={{ ...td, fontFamily: 'var(--font-mono)', textAlign: 'right', color }}>{remaining.toLocaleString()}</td>
+                  <td style={td}>
+                    <div style={{ height: 6, background: 'var(--bg-input)', borderRadius: 3, width: 100, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: usagePct + '%', background: color, borderRadius: 3 }} />
+                    </div>
+                    <span style={{ fontSize: 9, color }}>{usagePct}%</span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function MonitoringDashboard() {
   const [breakdown, setBreakdown] = useState<{ tools: EntityItem[]; workflows: EntityItem[]; agents: EntityItem[]; projects: EntityItem[] } | null>(null);
   const [sessions, setSessions] = useState<any[]>([]);

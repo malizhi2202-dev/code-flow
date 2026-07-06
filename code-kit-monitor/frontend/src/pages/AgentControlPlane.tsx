@@ -2,11 +2,15 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Radio, Circle, Activity, RefreshCw, Clock, XCircle,
   Play, Pause, RotateCcw, X, Server, Cpu, BarChart3, Link2,
+  Layers, Plus, Trash2, Edit3, Check, ChevronDown, ChevronRight,
+  GitBranch, Zap, CopyPlus, AlertTriangle,
 } from 'lucide-react';
 import { useControlPlane, AgentStatus, QueueItem, ReconcileEntry } from '../stores/controlPlane';
+import { useDomains, Domain, RouteResult, ScaleResult } from '../stores/domains';
+import { useAgents, Agent } from '../stores/agents';
 
 // ── 常量 ──
-type TabKey = 'agents' | 'queue' | 'reconcile';
+type TabKey = 'agents' | 'queue' | 'reconcile' | 'domains';
 
 const STATUS_PRIORITY: Record<string, number> = {
   dead: 0,
@@ -357,6 +361,668 @@ function ReconcileTab({ entries }: { entries: ReconcileEntry[] }) {
   );
 }
 
+// ── 域树 Tab ──
+
+function isAgentHealthy(status: string): boolean {
+  return status === 'running' || status === 'standby';
+}
+
+function CapabilityGroupRow({
+  groupKey,
+  capability,
+  agents,
+  isExpanded,
+  onToggle,
+  domainId,
+  autoRouteEnabled,
+  queueCount,
+  onRoute,
+  onScale,
+  routeLoading,
+  scaleLoading,
+}: {
+  groupKey: string;
+  capability: string;
+  agents: Agent[];
+  isExpanded: boolean;
+  onToggle: () => void;
+  domainId: number | null;
+  autoRouteEnabled: boolean;
+  queueCount: number;
+  onRoute: (capability: string) => void;
+  onScale: (capability: string) => void;
+  routeLoading: boolean;
+  scaleLoading: boolean;
+}) {
+  const healthyCount = agents.filter(function(a) { return isAgentHealthy(a.status); }).length;
+  const totalCount = agents.length;
+
+  const th: React.CSSProperties = {
+    textAlign: 'left', padding: '6px 8px', fontSize: 10, fontWeight: 600,
+    color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em',
+    borderBottom: '1px solid var(--border)',
+  };
+  const td: React.CSSProperties = {
+    padding: '6px 8px', borderBottom: '1px solid var(--border)',
+    fontSize: 11, color: 'var(--text)',
+  };
+
+  return (
+    <div style={{ marginBottom: 4, border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+      {/* 能力组头部 */}
+      <div
+        onClick={onToggle}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', cursor: 'pointer',
+          background: isExpanded ? 'var(--bg-selected)' : 'var(--bg-input)',
+          transition: 'background 0.15s', userSelect: 'none',
+          borderBottom: isExpanded ? '1px solid var(--border)' : 'none',
+        }}
+      >
+        <span style={{
+          color: 'var(--text-muted)', display: 'flex', alignItems: 'center',
+          transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+        }}>
+          <ChevronRight size={14} />
+        </span>
+        <span style={{ fontWeight: 600, fontSize: 12, flex: 1, color: 'var(--text)' }}>
+          📦 {capability}
+        </span>
+        <span style={{
+          fontSize: 10, color: healthyCount === totalCount ? 'var(--green)' : 'var(--orange)',
+          background: 'var(--bg-card)', padding: '1px 6px', borderRadius: 8,
+          fontWeight: 500,
+        }}>
+          {healthyCount} healthy / {totalCount} total
+        </span>
+        {/* 排队数 Badge */}
+        {queueCount > 0 && (
+          <span style={{
+            fontSize: 10, color: 'var(--orange)',
+            background: 'var(--orange-bg)', padding: '1px 6px', borderRadius: 8,
+            fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3,
+          }}>
+            <AlertTriangle size={10} />
+            排队: {queueCount}
+          </span>
+        )}
+        {/* 自动路由按钮 */}
+        {autoRouteEnabled && (
+          <button
+            onClick={function(e) { e.stopPropagation(); onRoute(capability); }}
+            disabled={routeLoading}
+            title="自动路由 - 选择负载最低的 Agent"
+            style={{
+              padding: '4px 10px', background: 'var(--blue)', color: '#fff',
+              border: 'none', borderRadius: 4, cursor: routeLoading ? 'wait' : 'pointer',
+              fontSize: 10, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 3,
+            }}
+          >
+            <GitBranch size={11} />
+            {routeLoading ? '路由中...' : '路由'}
+          </button>
+        )}
+        {/* 弹性缩放按钮 */}
+        {autoRouteEnabled && (
+          <button
+            onClick={function(e) { e.stopPropagation(); onScale(capability); }}
+            disabled={scaleLoading}
+            title="弹性缩放 - 创建 Agent 副本"
+            style={{
+              padding: '4px 10px', background: 'var(--green)', color: '#fff',
+              border: 'none', borderRadius: 4, cursor: scaleLoading ? 'wait' : 'pointer',
+              fontSize: 10, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 3,
+            }}
+          >
+            <CopyPlus size={11} />
+            {scaleLoading ? '扩容中...' : '扩容'}
+          </button>
+        )}
+      </div>
+
+      {/* 展开的 Agent 列表 */}
+      {isExpanded && (
+        <div style={{ padding: '4px 8px 8px' }}>
+          {agents.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 12, color: 'var(--text-muted)', fontSize: 11 }}>
+              无 Agent
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-input)' }}>
+                    <th style={{ ...th, paddingLeft: 10 }}>Agent 名称</th>
+                    <th style={th}>状态</th>
+                    <th style={th}>模型</th>
+                    <th style={th}>运行时</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agents.map(function(agent) {
+                    const statusStyle = agent.status === 'running'
+                      ? { color: 'var(--green)', bg: 'var(--green-bg)', label: '运行中' }
+                      : agent.status === 'standby'
+                      ? { color: 'var(--text-muted)', bg: 'var(--bg-input)', label: '待机' }
+                      : { color: 'var(--orange)', bg: 'var(--orange-bg)', label: agent.status || '未知' };
+                    return (
+                      <tr
+                        key={`cap-agent-${agent.id}`}
+                        style={{ borderBottom: '1px solid var(--border)' }}
+                      >
+                        <td style={{ ...td, fontWeight: 500, paddingLeft: 10, fontSize: 11 }}>
+                          {agent.name}
+                        </td>
+                        <td style={td}>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            padding: '2px 6px', borderRadius: 3, fontSize: 9,
+                            background: statusStyle.bg, color: statusStyle.color, fontWeight: 500,
+                          }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: statusStyle.color, display: 'inline-block' }} />
+                            {statusStyle.label}
+                          </span>
+                        </td>
+                        <td style={{ ...td, fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                          {agent.model_name}
+                        </td>
+                        <td style={{ ...td, fontSize: 10, color: 'var(--text-secondary)' }}>
+                          {agent.runtime}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DomainAccordionRow({
+  domainKey,
+  name,
+  agentCount,
+  isExpanded,
+  onToggle,
+  isDefault,
+  onDelete,
+  agents,
+  agentsLoading,
+  expandedGroups,
+  onToggleGroup,
+  domainId,
+  autoRouteEnabled,
+  queueCounts,
+  onRoute,
+  onScale,
+  routeLoading,
+  scaleLoading,
+}: {
+  domainKey: string;
+  name: string;
+  agentCount: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+  isDefault?: boolean;
+  onDelete?: () => void;
+  agents: Agent[];
+  agentsLoading: boolean;
+  expandedGroups: Set<string>;
+  onToggleGroup: (groupKey: string) => void;
+  domainId: number | null;
+  autoRouteEnabled: boolean;
+  queueCounts: Record<string, number>;
+  onRoute: (capability: string) => void;
+  onScale: (capability: string) => void;
+  routeLoading: boolean;
+  scaleLoading: boolean;
+}) {
+  // 按 capability 分组 agents
+  const capabilityGroups = (function() {
+    const groups: Record<string, Agent[]> = {};
+    for (const agent of agents) {
+      const cfg = agent.model_config_json || {};
+      const caps: string[] = (cfg && typeof cfg === 'object' && Array.isArray(cfg.capabilities))
+        ? cfg.capabilities
+        : [];
+      if (caps.length === 0) {
+        // 无 capability → "未分类"
+        if (!groups['未分类']) groups['未分类'] = [];
+        groups['未分类'].push(agent);
+      } else {
+        for (const cap of caps) {
+          if (!groups[cap]) groups[cap] = [];
+          groups[cap].push(agent);
+        }
+      }
+    }
+    return groups;
+  })();
+
+  return (
+    <div
+      style={{
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        marginBottom: 8,
+        overflow: 'hidden',
+        background: 'var(--bg-card)',
+      }}
+    >
+      {/* 域头部 */}
+      <div
+        onClick={onToggle}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '12px 16px',
+          cursor: 'pointer',
+          background: isExpanded ? 'var(--bg-selected)' : 'var(--bg-card)',
+          borderBottom: isExpanded ? '1px solid var(--border)' : 'none',
+          transition: 'background 0.15s',
+          userSelect: 'none',
+        }}
+      >
+        <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+          <ChevronRight size={16} />
+        </span>
+        <Layers size={16} style={{ color: isDefault ? 'var(--text-muted)' : 'var(--blue)' }} />
+        <span style={{ fontWeight: 600, fontSize: 13, flex: 1, color: isDefault ? 'var(--text-muted)' : 'var(--text)' }}>
+          {name}
+        </span>
+        <span style={{
+          fontSize: 11, color: 'var(--text-muted)',
+          background: 'var(--bg-input)', padding: '2px 8px', borderRadius: 10,
+          fontWeight: 500,
+        }}>
+          {agentCount} 个 Agent
+        </span>
+        {!isDefault && onDelete && (
+          <button
+            onClick={function(e) { e.stopPropagation(); onDelete(); }}
+            title="删除域"
+            style={{
+              padding: '4px 8px', background: 'none', border: '1px solid var(--border)',
+              borderRadius: 4, cursor: 'pointer', color: 'var(--text-muted)',
+              fontSize: 10, display: 'flex', alignItems: 'center', gap: 3,
+            }}
+          >
+            <Trash2 size={12} />
+            删除
+          </button>
+        )}
+      </div>
+
+      {/* 展开的能力组列表 */}
+      {isExpanded && (
+        <div style={{ padding: '8px 16px 12px' }}>
+          {agentsLoading ? (
+            <div style={{ textAlign: 'center', padding: 16, color: 'var(--text-muted)', fontSize: 12 }}>
+              加载中...
+            </div>
+          ) : Object.keys(capabilityGroups).length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 16, color: 'var(--text-muted)', fontSize: 12 }}>
+              此域暂无 Agent
+            </div>
+          ) : (
+            Object.keys(capabilityGroups).sort().map(function(cap) {
+              var groupAgents = capabilityGroups[cap];
+              var groupKey = domainKey + ':' + cap;
+              var capQueueCount = queueCounts[groupKey] || 0;
+              return (
+                <CapabilityGroupRow
+                  key={groupKey}
+                  groupKey={groupKey}
+                  capability={cap}
+                  agents={groupAgents}
+                  isExpanded={expandedGroups.has(groupKey)}
+                  onToggle={function() { onToggleGroup(groupKey); }}
+                  domainId={domainId}
+                  autoRouteEnabled={autoRouteEnabled}
+                  queueCount={capQueueCount}
+                  onRoute={onRoute}
+                  onScale={onScale}
+                  routeLoading={routeLoading}
+                  scaleLoading={scaleLoading}
+                />
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DomainTreeTab() {
+  const { domains, fetchDomains, createDomain, deleteDomain, autoRoute, queueCounts, toggleAutoRoute, routeToAgent, scaleAgents, fetchQueueCounts } = useDomains();
+  const { fetchAgentsByDomain } = useAgents();
+
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [domainAgents, setDomainAgents] = useState<Record<string, Agent[]>>({});
+  const [agentsLoading, setAgentsLoading] = useState<Record<string, boolean>>({});
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newDomainName, setNewDomainName] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [defaultAgentCount, setDefaultAgentCount] = useState(0);
+  const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
+  const [scaleResult, setScaleResult] = useState<ScaleResult | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [scaleLoading, setScaleLoading] = useState(false);
+  // Track which domain gets the toggle (null = disabled state)
+  const [activeDomainId] = useState<number | null>(null);
+  const [activeDomainKey] = useState('');
+
+  // Route handler
+  const handleRoute = async function(capability: string) {
+    setRouteLoading(true);
+    try {
+      const result = await routeToAgent(activeDomainId, capability);
+      setRouteResult(result);
+      if (result) {
+        // Refresh queue counts
+        if (activeDomainId !== null) {
+          fetchQueueCounts(activeDomainId);
+        }
+      }
+    } catch (_e) {
+      // ignore
+    } finally {
+      setRouteLoading(false);
+    }
+  };
+
+  // Scale handler
+  const handleScale = async function(capability: string) {
+    if (activeDomainId === null) return;
+    setScaleLoading(true);
+    try {
+      const result = await scaleAgents(activeDomainId, capability, 5);
+      setScaleResult(result);
+      // Refresh agents
+      if (result && result.status === 'scaled') {
+        const updatedAgents = await fetchAgentsByDomain(activeDomainId);
+        setDomainAgents(function(prev) { return { ...prev, [String(activeDomainId)]: updatedAgents }; });
+      }
+    } catch (_e) {
+      // ignore
+    } finally {
+      setScaleLoading(false);
+    }
+  };
+
+  // 初始加载域列表 + 默认域 agent 数量
+  useEffect(function() {
+    fetchDomains();
+    // 获取默认域 agent 数量
+    fetchAgentsByDomain(null).then(function(agents) {
+      setDefaultAgentCount(agents.length);
+    }).catch(function() {});
+  }, []);
+
+  const toggleGroup = function(groupKey: string) {
+    setExpandedGroups(function(prev) {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
+
+  const toggleDomain = async function(key: string) {
+    const newKeys = new Set(expandedKeys);
+    if (newKeys.has(key)) {
+      newKeys.delete(key);
+    } else {
+      newKeys.add(key);
+      // 缓存未加载则拉取
+      if (!domainAgents[key]) {
+        setAgentsLoading(function(prev) { return { ...prev, [key]: true }; });
+        const domainId = key === 'default' ? null : parseInt(key, 10);
+        try {
+          const agents = await fetchAgentsByDomain(domainId);
+          setDomainAgents(function(prev) { return { ...prev, [key]: agents }; });
+          if (key === 'default') setDefaultAgentCount(agents.length);
+        } catch (_e) {
+          // ignore
+        } finally {
+          setAgentsLoading(function(prev) { return { ...prev, [key]: false }; });
+        }
+      }
+    }
+    setExpandedKeys(newKeys);
+  };
+
+  const handleCreate = async function() {
+    const name = newDomainName.trim();
+    if (!name) return;
+    try {
+      await createDomain(name);
+      setNewDomainName('');
+      setShowCreateModal(false);
+      fetchDomains();
+    } catch (e: any) {
+      alert(e.message || '创建失败');
+    }
+  };
+
+  const handleDelete = async function(id: number) {
+    await deleteDomain(id);
+    setDeleteConfirm(null);
+    // 从展开集合中移除
+    const newKeys = new Set(expandedKeys);
+    newKeys.delete(String(id));
+    setExpandedKeys(newKeys);
+    // 清除缓存
+    setDomainAgents(function(prev) {
+      const next = { ...prev };
+      delete next[String(id)];
+      return next;
+    });
+    fetchDomains();
+  };
+
+  // 按 id 排序域
+  const sortedDomains = domains.slice().sort(function(a, b) { return a.id - b.id; });
+
+  return (
+    <div>
+      {/* 头部 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Layers size={16} style={{ color: 'var(--blue)' }} />
+          隔离域管理
+        </div>
+        <button
+          onClick={function() { setShowCreateModal(true); }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '7px 14px', background: 'var(--blue)', color: '#fff',
+            border: 'none', borderRadius: 5, cursor: 'pointer',
+            fontSize: 12, fontWeight: 500,
+          }}
+        >
+          <Plus size={14} />
+          新建域
+        </button>
+      </div>
+
+      {/* 默认域 */}
+      <DomainAccordionRow
+        domainKey="default"
+        name="默认域"
+        agentCount={defaultAgentCount}
+        isExpanded={expandedKeys.has('default')}
+        onToggle={function() { toggleDomain('default'); }}
+        isDefault={true}
+        agents={domainAgents['default'] || []}
+        agentsLoading={agentsLoading['default'] || false}
+        expandedGroups={expandedGroups}
+        onToggleGroup={toggleGroup}
+        domainId={null}
+        autoRouteEnabled={autoRoute['default'] || false}
+        queueCounts={queueCounts}
+        onRoute={handleRoute}
+        onScale={handleScale}
+        routeLoading={routeLoading}
+        scaleLoading={scaleLoading}
+      />
+
+      {/* 其他域 */}
+      {sortedDomains.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)', fontSize: 13 }}>
+          暂无隔离域，点击「新建域」创建
+        </div>
+      ) : (
+        sortedDomains.map(function(domain) {
+          const key = String(domain.id);
+          return (
+            <DomainAccordionRow
+              key={`domain-${domain.id}`}
+              domainKey={key}
+              name={domain.name}
+              agentCount={domain.agent_count ?? 0}
+              isExpanded={expandedKeys.has(key)}
+              onToggle={function() { toggleDomain(key); }}
+              onDelete={function() { setDeleteConfirm(domain.id); }}
+              agents={domainAgents[key] || []}
+              agentsLoading={agentsLoading[key] || false}
+              expandedGroups={expandedGroups}
+              onToggleGroup={toggleGroup}
+              domainId={domain.id}
+              autoRouteEnabled={autoRoute[key] || false}
+              queueCounts={queueCounts}
+              onRoute={handleRoute}
+              onScale={handleScale}
+              routeLoading={routeLoading}
+              scaleLoading={scaleLoading}
+            />
+          );
+        })
+      )}
+
+      {/* 新建域 Modal */}
+      {showCreateModal && (
+        <div
+          onClick={function() { setShowCreateModal(false); }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 100,
+          }}
+        >
+          <div
+            onClick={function(e) { e.stopPropagation(); }}
+            style={{
+              background: 'var(--bg-card)', borderRadius: 8, padding: 24,
+              width: 360, border: '1px solid var(--border)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            }}
+          >
+            <h4 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 16px' }}>
+              新建隔离域
+            </h4>
+            <input
+              autoFocus
+              value={newDomainName}
+              onChange={function(e) { setNewDomainName(e.target.value); }}
+              onKeyDown={function(e) { if (e.key === 'Enter') handleCreate(); }}
+              placeholder="输入域名称"
+              style={{
+                width: '100%', padding: '8px 12px',
+                border: '1px solid var(--border)', borderRadius: 4,
+                background: 'var(--bg-input)', color: 'var(--text)',
+                fontSize: 13, outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button
+                onClick={function() { setShowCreateModal(false); }}
+                style={{
+                  padding: '7px 16px', background: 'var(--bg-input)',
+                  border: '1px solid var(--border)', borderRadius: 4,
+                  cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12,
+                }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreate}
+                style={{
+                  padding: '7px 16px', background: 'var(--blue)', color: '#fff',
+                  border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12,
+                }}
+              >
+                创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 删除确认 */}
+      {deleteConfirm !== null && (
+        <div
+          onClick={function() { setDeleteConfirm(null); }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 100,
+          }}
+        >
+          <div
+            onClick={function(e) { e.stopPropagation(); }}
+            style={{
+              background: 'var(--bg-card)', borderRadius: 8, padding: 24,
+              width: 360, border: '1px solid var(--border)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            }}
+          >
+            <h4 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 8px', color: 'var(--red)' }}>
+              ⚠ 确认删除
+            </h4>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.6 }}>
+              删除该域后，域内所有 Agent 将自动回归默认域（domain_id 置为 NULL）。
+              此操作不可撤销。
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={function() { setDeleteConfirm(null); }}
+                style={{
+                  padding: '7px 16px', background: 'var(--bg-input)',
+                  border: '1px solid var(--border)', borderRadius: 4,
+                  cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12,
+                }}
+              >
+                取消
+              </button>
+              <button
+                onClick={function() { handleDelete(deleteConfirm); }}
+                style={{
+                  padding: '7px 16px', background: 'var(--red)', color: '#fff',
+                  border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12,
+                }}
+              >
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 详情面板 ──
 function DetailPanel({
   agent,
@@ -667,6 +1333,7 @@ export default function AgentControlPlane() {
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode; count: number }[] = [
     { key: 'agents',    label: 'Agent 列表',   icon: <Server size={13} />,     count: probes.length },
+    { key: 'domains',   label: '隔离域',        icon: <Layers size={13} />,     count: 0 },
     { key: 'queue',     label: '调度队列',      icon: <Clock size={13} />,      count: queue.length },
     { key: 'reconcile', label: 'Reconcile 日志', icon: <RotateCcw size={13} />, count: reconcile.length },
   ];
@@ -738,6 +1405,7 @@ export default function AgentControlPlane() {
               onSelectAgent={function(id) { setSelectedAgent(id); }}
             />
           )}
+          {activeTab === 'domains' && <DomainTreeTab />}
           {activeTab === 'queue' && <QueueTab queue={queue} />}
           {activeTab === 'reconcile' && <ReconcileTab entries={reconcile} />}
         </div>

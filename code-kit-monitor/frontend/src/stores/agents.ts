@@ -4,6 +4,7 @@ export interface Agent {
   id: number; owner_id: string; name: string; description: string;
   runtime: 'langchain' | 'langgraph'; model_provider: string; model_name: string;
   model_config_json: any; api_key: string;
+  domain_id: number | null;
   workflow_id: number | null; workflow_summary?: any;
   token_soft_limit: number; token_hard_limit: number;
   total_tokens_used: number; status: string; visibility: string;
@@ -13,6 +14,7 @@ export interface Agent {
 interface AgentsState {
   agents: Agent[]; loading: boolean;
   fetchAgents: () => Promise<void>;
+  fetchAgentsByDomain: (domainId: number | null) => Promise<Agent[]>;
   createAgent: (data: any) => Promise<Agent | null>;
   deleteAgent: (id: number) => Promise<boolean>;
   runAgent: (id: number) => Promise<any>;
@@ -28,6 +30,12 @@ export const useAgents = create<AgentsState>((set, get) => ({
     const res = await fetch('/api/agents', { headers: { 'X-User-Id': uid() } });
     const data = await res.json();
     set({ agents: data.agents || [], loading: false });
+  },
+  fetchAgentsByDomain: async (domainId: number | null) => {
+    const params = domainId === null ? 'domain_id=0' : `domain_id=${domainId}`;
+    const res = await fetch(`/api/agents?${params}`, { headers: { 'X-User-Id': uid() } });
+    const data = await res.json();
+    return data.agents || [];
   },
   createAgent: async (payload) => {
     const res = await fetch('/api/agents', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid() }, body: JSON.stringify(payload) });
