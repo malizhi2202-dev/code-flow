@@ -29,6 +29,8 @@ from routes.agent_knowledge_api import router as agent_knowledge_router
 from routes.chat_api import router as chat_router
 from routes.channel_api import router as channel_router
 from routes.control_plane_api import router as control_plane_router
+from routes.domain_api import router as domain_router
+from routes.gateway_api import router as gateway_router
 
 
 @asynccontextmanager
@@ -38,6 +40,17 @@ async def lifespan(app: FastAPI):
     try:
         init_db()
         print("[monitor] 数据库表已就绪")
+        # 自动创建默认域
+        from models.domain import Domain
+        from database import SessionLocal
+        _db = SessionLocal()
+        try:
+            if not _db.query(Domain).filter(Domain.name == "默认域", Domain.owner_id == "admin").first():
+                _db.add(Domain(name="默认域", owner_id="admin"))
+                _db.commit()
+                print("[monitor] 默认域 '默认域' 已创建")
+        finally:
+            _db.close()
     except Exception as e:
         print(f"[monitor] 数据库初始化跳过（可能 MySQL 未启动）: {e}")
     # 启动 runtime.jsonl 文件监控器（每 30s 增量导入 code-kit 运行时数据）
@@ -161,6 +174,8 @@ app.include_router(assembly_router)
 app.include_router(chat_router)
 app.include_router(channel_router)
 app.include_router(control_plane_router)
+app.include_router(domain_router)
+app.include_router(gateway_router)
 
 
 @app.get("/api/ping")

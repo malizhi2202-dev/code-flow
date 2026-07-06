@@ -20,10 +20,19 @@ def _filter_owner(q, user: dict):
 
 
 @router.get("")
-def api_list_agents(status: str | None = None, request: Request = None, db: Session = Depends(get_db)):
+def api_list_agents(status: str | None = None, domain_id: int | None = None, capability: str | None = None, request: Request = None, db: Session = Depends(get_db)):
     q = _filter_owner(db.query(Agent), _user(request))
     if status:
         q = q.filter(Agent.status == status)
+    if domain_id is not None:
+        if domain_id == 0:
+            # domain_id=0 表示查询无域 Agent（domain_id IS NULL）
+            q = q.filter(Agent.domain_id.is_(None))
+        else:
+            q = q.filter(Agent.domain_id == domain_id)
+    if capability:
+        # 过滤 capability: 匹配 model_config_json 中的 capabilities 数组
+        q = q.filter(Agent.model_config_json.contains(f'"{capability}"'))
     agents = q.order_by(Agent.updated_at.desc()).all()
     return {"agents": [a.to_dict() for a in agents], "total": len(agents)}
 
@@ -32,7 +41,7 @@ def api_list_agents(status: str | None = None, request: Request = None, db: Sess
 def api_create_agent(payload: dict, request: Request = None, db: Session = Depends(get_db)):
     user = _user(request)
     api_key = payload.get("api_key", "") or "not_set"
-    agent = Agent(owner_id=user["id"], name=payload["name"], description=payload.get("description", ""), runtime=payload.get("runtime", "langgraph"), model_provider=payload.get("model_provider", "openai"), model_name=payload.get("model_name", ""), model_config_json=payload.get("model_config_json", {}), api_key_encrypted=encrypt(api_key), workflow_id=payload.get("workflow_id"), token_soft_limit=payload.get("token_soft_limit", 800000), token_hard_limit=payload.get("token_hard_limit", 1000000))
+    agent = Agent(owner_id=user["id"], name=payload["name"], description=payload.get("description", ""), runtime=payload.get("runtime", "langgraph"), model_provider=payload.get("model_provider", "openai"), model_name=payload.get("model_name", ""), model_config_json=payload.get("model_config_json", {}), api_key_encrypted=encrypt(api_key), workflow_id=payload.get("workflow_id"), token_soft_limit=payload.get("token_soft_limit", 800000), token_hard_limit=payload.get("token_hard_limit", 1000000), domain_id=payload.get("domain_id"))
     db.add(agent)
     db.commit()
     db.refresh(agent)
@@ -62,7 +71,7 @@ def api_update_agent(agent_id: int, payload: dict, request: Request = None, db: 
     a = q.first()
     if not a:
         raise HTTPException(status_code=404, detail="Agent 不存在")
-    for f in ("name", "description", "model_provider", "model_name", "model_config_json", "workflow_id", "token_soft_limit", "token_hard_limit"):
+    for f in ("name", "description", "model_provider", "model_name", "model_config_json", "workflow_id", "token_soft_limit", "token_hard_limit", "domain_id"):
         if f in payload:
             setattr(a, f, payload[f])
     if "api_key" in payload and payload["api_key"]:
@@ -99,8 +108,37 @@ def api_run_agent(agent_id: int, request: Request = None, db: Session = Depends(
         raise HTTPException(status_code=400, detail=f"Token 已达硬限制 ({a.token_hard_limit})")
     a.status = "running"
     db.commit()
+
+    # ── A2: 自动加载同域 + 重叠 capabilities 的记忆 ──
+    import json as _json
+    from models.agent_memory import AgentMemory
+    from datetime import datetime, timedelta
+    recent_since = datetime.utcnow() - timedelta(days=7)
+    capabilities = (a.model_config_json or {}).get("capabilities", [])
+    mem_q = db.query(AgentMemory).filter(
+        AgentMemory.owner_id == user["id"],
+        AgentMemory.created_at >= recent_since,
+    )
+    if a.domain_id is not None:
+        mem_q = mem_q.filter(
+            (AgentMemory.domain_id == a.domain_id) | (AgentMemory.domain_id.is_(None))
+        )
+    loaded_memories = mem_q.order_by(AgentMemory.priority.desc(), AgentMemory.created_at.desc()).limit(20).all()
+
+    # 按 capability 过滤：记忆的 key 包含 capability 关键词
+    if capabilities:
+        filtered = []
+        for m in loaded_memories:
+            for cap in capabilities:
+                if cap.lower() in m.key.lower() or cap.lower() in (m.value or "").lower():
+                    filtered.append(m)
+                    break
+        loaded_memories = filtered
+
+    loaded = [m.to_dict() for m in loaded_memories]
+
     log_audit(user["id"], user.get("name", user["id"]), "agent.run", a.name, "agent", "started", request.client.host if request.client else "127.0.0.1")
-    return {"status": "running", "agent_id": a.id, "runtime": a.runtime, "model": a.model_name}
+    return {"status": "running", "agent_id": a.id, "runtime": a.runtime, "model": a.model_name, "loaded_memories": loaded, "loaded_count": len(loaded)}
 
 
 @router.post("/{agent_id}/stop")
@@ -112,5 +150,28 @@ def api_stop_agent(agent_id: int, request: Request = None, db: Session = Depends
         raise HTTPException(status_code=404, detail="Agent 不存在")
     a.status = "standby"
     db.commit()
+
+    # ── A3: 自动写入决策记忆 ──
+    import json as _json
+    from datetime import datetime
+    from models.agent_memory import AgentMemory
+    memory = AgentMemory(
+        agent_id=a.id,
+        owner_id=user["id"],
+        domain_id=a.domain_id,
+        channel="web",
+        key=f"decision_{a.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
+        value=_json.dumps({
+            "action": "agent_stopped",
+            "agent_name": a.name,
+            "tokens_used": a.total_tokens_used,
+            "timestamp": datetime.utcnow().isoformat(),
+        }),
+        memory_type="decision",
+        priority=7,
+    )
+    db.add(memory)
+    db.commit()
+
     log_audit(user["id"], user.get("name", user["id"]), "agent.stop", a.name, "agent", "stopped", request.client.host if request.client else "127.0.0.1")
     return {"status": "stopped"}
