@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Trash2, ShieldAlert, Plus, X, ChartBarIncreasing, RefreshCw, Database, Link2, Wifi, WifiOff, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, ShieldAlert, Plus, X, ChartBarIncreasing, RefreshCw, Database, Link2, Wifi, WifiOff, ExternalLink, Upload, Loader2, Clock } from 'lucide-react';
 import ChatWindow from '../components/ChatWindow';
 import ChannelConfigComponent from '../components/ChannelConfig';
 import EntityBreakdownPanel from '../components/EntityBreakdownPanel';
@@ -26,6 +26,8 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
   var [knowledgeSources, setKnowledgeSources] = useState<any[]>([]);
   var [showSourceForm, setShowSourceForm] = useState(false);
   var [sourceForm, setSourceForm] = useState<any>({ source_type: 'http_api', url: '', name: '', description: '', config_json: {} });
+  // 文件上传
+  var [uploading, setUploading] = useState(false);
   // 记忆
   var [memories, setMemories] = useState<any[]>([]);
   var [memoryChannels, setMemoryChannels] = useState<any>({});
@@ -37,6 +39,11 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
   var [chatError, setChatError] = useState<string | null>(null);
   var [chatConversationId, setChatConversationId] = useState<number | null>(null);
 
+  // 定时任务
+  var [scheduledTasks, setScheduledTasks] = useState<any[]>([]);
+  var [showTaskForm, setShowTaskForm] = useState(false);
+  var [taskForm, setTaskForm] = useState<any>({ name: '', cron_expr: '0 9 * * *', capability: '', enabled: true });
+
   var uid = function() { return localStorage.getItem('current_user_id') || 'admin'; };
 
   useEffect(function() {
@@ -46,6 +53,8 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
       fetch('/api/agents/' + agent.id + '/knowledge-sources', { headers: { 'X-User-Id': uid() } }).then(function(r) { return r.json(); }).then(function(d) { if (Array.isArray(d)) setKnowledgeSources(d); });
       loadMemories();
       loadMemoryStats();
+      // 加载定时任务
+      fetch('/api/agents/' + agent.id + '/scheduled-tasks', { headers: { 'X-User-Id': uid() } }).then(function(r) { return r.json(); }).then(function(d) { if (Array.isArray(d)) setScheduledTasks(d); });
     }
     if (agent?.id) {
       fetch('/api/metrics/sessions?limit=500&entity_type=agent', { headers: { 'X-User-Id': uid() } }).then(function(r) { return r.json(); }).then(function(d) {
@@ -118,6 +127,47 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
       .then(function() { loadMemories(); loadMemoryStats(); });
   };
 
+  // 定时任务 CRUD
+  var saveTask = function() {
+    if (!agent?.id) return;
+    var url = '/api/agents/' + agent.id + '/scheduled-tasks';
+    var method = taskForm.id ? 'PUT' : 'POST';
+    var apiUrl = taskForm.id ? url + '/' + taskForm.id : url;
+    fetch(apiUrl, { method: method, headers: { 'Content-Type': 'application/json', 'X-User-Id': uid() }, body: JSON.stringify(taskForm) })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.ok || d.task) {
+          var t = d.task || taskForm;
+          if (taskForm.id) {
+            setScheduledTasks(scheduledTasks.map(function(st: any) { return st.id === t.id ? t : st; }));
+          } else {
+            setScheduledTasks([t].concat(scheduledTasks));
+          }
+          setShowTaskForm(false);
+          setTaskForm({ name: '', cron_expr: '0 9 * * *', capability: '', enabled: true });
+        }
+      });
+  };
+
+  var deleteTask = function(taskId: number) {
+    if (!agent?.id) return;
+    fetch('/api/agents/' + agent.id + '/scheduled-tasks/' + taskId, { method: 'DELETE', headers: { 'X-User-Id': uid() } })
+      .then(function() { setScheduledTasks(scheduledTasks.filter(function(st: any) { return st.id !== taskId; })); });
+  };
+
+  var toggleTask = function(taskId: number, enabled: boolean) {
+    if (!agent?.id) return;
+    fetch('/api/agents/' + agent.id + '/scheduled-tasks/' + taskId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-User-Id': uid() },
+      body: JSON.stringify({ enabled: enabled }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.ok || d.task) {
+        setScheduledTasks(scheduledTasks.map(function(st: any) { return st.id === taskId ? (d.task || Object.assign({}, st, { enabled: enabled })) : st; }));
+      }
+    });
+  };
+
   var testSource = function(sourceId: number) {
     if (!agent?.id) return;
     fetch('/api/agents/' + agent.id + '/knowledge-sources/' + sourceId + '/test', { method: 'POST', headers: { 'X-User-Id': uid() } })
@@ -129,6 +179,24 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
         });
         setKnowledgeSources(newList);
       });
+  };
+  // 文件上传
+  var handleFileUpload = function(file: File) {
+    if (!agent?.id) return;
+    setUploading(true);
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('name', file.name);
+    fetch('/api/agents/' + agent.id + '/knowledge-sources/upload', {
+      method: 'POST',
+      headers: { 'X-User-Id': uid() },
+      body: fd,
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.ok && d.source) {
+        setKnowledgeSources([d.source].concat(knowledgeSources));
+      }
+      setUploading(false);
+    }).catch(function() { setUploading(false); });
   };
   // 对话功能
   var sendChatMessage = function(content: string) {
@@ -185,7 +253,7 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
         <div style={{ maxWidth: 680, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div><label style={lbl}>名称</label><input value={data.name} onChange={function(e) { setData(Object.assign({}, data, { name: e.target.value })); }} style={inp} /></div>
-            <div><label style={lbl}>运行时</label><select value={data.runtime} onChange={function(e) { setData(Object.assign({}, data, { runtime: e.target.value })); }} style={inp}><option value="langgraph">LangGraph</option><option value="langchain">LangChain</option></select></div>
+            <div><label style={lbl}>运行时</label><select value={data.runtime} onChange={function(e) { setData(Object.assign({}, data, { runtime: e.target.value })); }} style={inp}><option value="langgraph">LangGraph</option><option value="langchain">LangChain</option><option value="autogen">AutoGen</option><option value="crewai">CrewAI</option><option value="codex">OpenAI Codex CLI</option><option value="custom">自定义</option></select></div>
           </div>
           <div><label style={lbl}>描述</label><input value={data.description} onChange={function(e) { setData(Object.assign({}, data, { description: e.target.value })); }} style={inp} /></div>
 
@@ -203,7 +271,7 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-            <div><label style={lbl}>模型 Provider</label><select value={data.model_provider} onChange={function(e) { setData(Object.assign({}, data, { model_provider: e.target.value })); }} style={inp}><option value="ollama">Ollama</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></select></div>
+            <div><label style={lbl}>模型 Provider</label><select value={data.model_provider} onChange={function(e) { setData(Object.assign({}, data, { model_provider: e.target.value })); }} style={inp}><option value="ollama">Ollama</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="deepseek">DeepSeek</option><option value="gemini">Gemini</option><option value="codex">Codex</option><option value="hermes">Hermes</option></select></div>
             <div><label style={lbl}>模型名称</label><input value={data.model_name} onChange={function(e) { setData(Object.assign({}, data, { model_name: e.target.value })); }} style={inp} /></div>
             <div><label style={lbl}>API Key</label><input type="password" value={data.api_key || ''} onChange={function(e) { setData(Object.assign({}, data, { api_key: e.target.value })); }} style={inp} /></div>
           </div>
@@ -243,11 +311,31 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
             <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Database size={14} /> 📡 资料源接入（RAG / DB / API）</summary>
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {knowledgeSources.map(function(ks: any) {
+                var isProcessing = ks.status && ['uploading', 'processing', 'indexing'].includes(ks.status);
+                var statusCfg: Record<string, any> = {
+                  uploading: { label: '上传中', color: '#f59e0b', pct: 10 },
+                  processing: { label: '解析中', color: '#3b82f6', pct: 35 },
+                  indexing: { label: '索引中', color: '#8b5cf6', pct: 70 },
+                  indexed: { label: '已完成', color: '#10b981', pct: 100 },
+                  failed: { label: '失败', color: '#ef4444', pct: 0 },
+                };
+                var sc = statusCfg[ks.status] || null;
                 return (
                   <div key={ks.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--bg-input)', borderRadius: 6, border: '1px solid var(--border)' }}>
                     <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 3, background: ks.source_type === 'rag_api' ? 'var(--purple-bg, #7c3aed20)' : ks.source_type === 'mysql' ? 'var(--blue-bg)' : 'var(--bg-card)', color: ks.source_type === 'rag_api' ? '#a78bfa' : 'var(--blue)', fontWeight: 500 }}>{ks.source_type}</span>
                     <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{ks.name || ks.url}</span>
                     <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{ks.url}</span>
+                    {isProcessing && sc && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+                        <Loader2 size={10} style={{ animation: 'spin 1s linear infinite', color: sc.color }} />
+                        <span style={{ color: sc.color }}>{sc.label}</span>
+                        <div style={{ width: 40, height: 3, background: 'var(--bg-card)', borderRadius: 2 }}>
+                          <div style={{ width: sc.pct + '%', height: '100%', background: sc.color, borderRadius: 2 }} />
+                        </div>
+                      </span>
+                    )}
+                    {ks.status === 'indexed' && <span style={{ fontSize: 10, color: 'var(--green)' }}>✅ 已索引</span>}
+                    {ks.status === 'failed' && <span style={{ fontSize: 10, color: 'var(--red)' }}>❌ 失败</span>}
                     {ks.last_test_ok === true && <span title="连接正常"><Wifi size={12} color="var(--green)" /></span>}
                     {ks.last_test_ok === false && <span title="连接失败"><WifiOff size={12} color="var(--red)" /></span>}
                     <button onClick={function() { testSource(ks.id); }} style={{ padding: '2px 8px', fontSize: 10, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 3, cursor: 'pointer', color: 'var(--text-secondary)' }}>测试</button>
@@ -257,9 +345,16 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
                 );
               })}
               {!showSourceForm && (
-                <button onClick={function() { setShowSourceForm(true); }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px', background: 'none', border: '1px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12 }}>
-                  <Plus size={12} /> 添加资料源
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={function() { setShowSourceForm(true); }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px', background: 'none', border: '1px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12 }}>
+                    <Plus size={12} /> 添加资料源
+                  </button>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px', background: 'none', border: '1px dashed var(--border)', borderRadius: 6, cursor: uploading ? 'wait' : 'pointer', color: 'var(--text-secondary)', fontSize: 12, opacity: uploading ? 0.5 : 1 }}>
+                    {uploading ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={12} />}
+                    {uploading ? '上传中...' : '上传文件'}
+                    <input type="file" accept=".pdf,.docx,.txt,.md,.py,.js,.json" onChange={function(e) { var f = e.target.files?.[0]; if (f) handleFileUpload(f); }} style={{ display: 'none' }} />
+                  </label>
+                </div>
               )}
 
               {showSourceForm && (
@@ -274,6 +369,7 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
                         <option value="redis">Redis</option>
                         <option value="http_api">HTTP API</option>
                         <option value="url_crawl">URL 爬取</option>
+                        <option value="local_file">📂 本地文件</option>
                       </select>
                     </div>
                     <div>
@@ -306,6 +402,84 @@ export default function AgentDetail({ agent, onBack, onSave, onDelete, saveError
                     <button onClick={function() { setShowSourceForm(false); setSourceForm({ source_type: 'http_api', url: '', name: '', description: '', config_json: {} }); }} style={{ padding: '6px 12px', background: 'none', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>取消</button>
                   </div>
                 </div>
+              )}
+            </div>
+          </details>
+
+          {/* 定时任务 */}
+          <details style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}><Clock size={14} /> ⏰ 定时任务</summary>
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {scheduledTasks.map(function(t: any) {
+                return (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--bg-input)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                    <span style={{
+                      fontSize: 10, padding: '2px 6px', borderRadius: 3,
+                      background: t.enabled ? 'var(--green-bg)' : 'var(--bg-card)',
+                      color: t.enabled ? 'var(--green)' : 'var(--text-dim)',
+                      fontWeight: 500,
+                    }}>{t.enabled ? '启用' : '禁用'}</span>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{t.name || t.capability}</span>
+                    <code style={{ fontSize: 10, color: 'var(--text-dim)', background: 'var(--bg-card)', padding: '2px 6px', borderRadius: 3 }}>{t.cron_expr}</code>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{t.capability}</span>
+                    {t.last_run && <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>上次: {new Date(t.last_run).toLocaleString('zh-CN')}</span>}
+                    <button
+                      onClick={function() { toggleTask(t.id, !t.enabled); }}
+                      style={{
+                        padding: '2px 8px', fontSize: 10,
+                        background: t.enabled ? 'var(--bg-card)' : 'var(--green-bg)',
+                        border: '1px solid var(--border)', borderRadius: 3, cursor: 'pointer',
+                        color: t.enabled ? 'var(--text-secondary)' : 'var(--green)',
+                      }}
+                    >
+                      {t.enabled ? '禁用' : '启用'}
+                    </button>
+                    <button onClick={function() { setTaskForm(t); setShowTaskForm(true); }} style={{ padding: '2px 8px', fontSize: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>✏️</button>
+                    <button onClick={function() { deleteTask(t.id); }} style={{ padding: '2px 4px', fontSize: 10, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)' }} title="删除"><X size={12} /></button>
+                  </div>
+                );
+              })}
+              {!showTaskForm && (
+                <button onClick={function() { setShowTaskForm(true); setTaskForm({ name: '', cron_expr: '0 9 * * *', capability: '', enabled: true }); }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '8px 12px', background: 'none', border: '1px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12 }}>
+                  <Plus size={12} /> 添加定时任务
+                </button>
+              )}
+
+              {showTaskForm && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: 'var(--bg-input)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <div>
+                      <label style={lbl}>任务名称</label>
+                      <input value={taskForm.name} onChange={function(e) { setTaskForm(Object.assign({}, taskForm, { name: e.target.value })); }} style={inp} placeholder="例如：每日代码审查" />
+                    </div>
+                    <div>
+                      <label style={lbl}>能力 (capability)</label>
+                      <input value={taskForm.capability} onChange={function(e) { setTaskForm(Object.assign({}, taskForm, { capability: e.target.value })); }} style={inp} placeholder="例如：code_review" />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6 }}>
+                    <div>
+                      <label style={lbl}>Cron 表达式</label>
+                      <input value={taskForm.cron_expr} onChange={function(e) { setTaskForm(Object.assign({}, taskForm, { cron_expr: e.target.value })); }} style={inp} placeholder="分 时 日 月 周，例如：0 9 * * 1" />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>
+                        <input type="checkbox" checked={taskForm.enabled} onChange={function(e) { setTaskForm(Object.assign({}, taskForm, { enabled: e.target.checked })); }} />
+                        启用
+                      </label>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+                    快捷 cron：<code style={{ cursor: 'pointer', padding: '1px 4px', background: 'var(--bg-card)', borderRadius: 2 }} onClick={function() { setTaskForm(Object.assign({}, taskForm, { cron_expr: '*/5 * * * *' })); }}>*/5 * * * * (每5分钟)</code> <code style={{ cursor: 'pointer', padding: '1px 4px', background: 'var(--bg-card)', borderRadius: 2 }} onClick={function() { setTaskForm(Object.assign({}, taskForm, { cron_expr: '0 * * * *' })); }}>0 * * * * (每小时)</code> <code style={{ cursor: 'pointer', padding: '1px 4px', background: 'var(--bg-card)', borderRadius: 2 }} onClick={function() { setTaskForm(Object.assign({}, taskForm, { cron_expr: '0 9 * * 1' })); }}>0 9 * * 1 (每周一 9:00)</code>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={saveTask} style={{ padding: '6px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>保存</button>
+                    <button onClick={function() { setShowTaskForm(false); setTaskForm({ name: '', cron_expr: '0 9 * * *', capability: '', enabled: true }); }} style={{ padding: '6px 12px', background: 'none', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)' }}>取消</button>
+                  </div>
+                </div>
+              )}
+              {scheduledTasks.length === 0 && !showTaskForm && (
+                <div style={{ textAlign: 'center', padding: 16, color: 'var(--text-dim)', fontSize: 12 }}>暂无定时任务，点击上方按钮添加</div>
               )}
             </div>
           </details>

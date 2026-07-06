@@ -27,3 +27,6 @@ from models.orchestration import (  # noqa: E402, F401
 from models.agent_probe import AgentProbe  # noqa: E402, F401
 from models.scheduler_queue import SchedulerQueue  # noqa: E402, F401
 from models.domain import Domain  # noqa: E402, F401
+from models.human_approval import HumanApproval  # noqa: E402, F401
+from models.knowledge_tag import KnowledgeTag, KnowledgeSourceTag  # noqa: E402, F401
+from models.scheduled_task import ScheduledTask  # noqa: E402, F401

@@ -130,7 +130,7 @@ def api_get_global_metrics(minutes: int = 60, request: Request = None, db: Sessi
 
 
 @router.get("/sessions")
-def api_get_sessions(entity_type: str | None = None, entity_id: int | None = None, limit: int = 50, minutes: int = 1440, request: Request = None, db: Session = Depends(get_db)):
+def api_get_sessions(entity_type: str | None = None, entity_id: int | None = None, limit: int = 50, minutes: int = 1440, status: str | None = None, request: Request = None, db: Session = Depends(get_db)):
     """获取会话级监控数据（已做 owner 隔离）."""
     from models.metrics import SessionMetric
     from datetime import datetime, timedelta
@@ -141,6 +141,8 @@ def api_get_sessions(entity_type: str | None = None, entity_id: int | None = Non
         q = q.filter(SessionMetric.entity_type == entity_type)
     if entity_id:
         q = q.filter(SessionMetric.entity_id == entity_id)
+    if status:
+        q = q.filter(SessionMetric.status == status)
 
     # owner 隔离：解析 entity 的 owner 并过滤
     if entity_type and entity_id:

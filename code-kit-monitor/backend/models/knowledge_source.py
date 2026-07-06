@@ -4,7 +4,7 @@ from sqlalchemy import String, Integer, DateTime, Text, JSON, ForeignKey, Boolea
 from sqlalchemy.orm import Mapped, mapped_column
 from models import Base
 
-SOURCE_TYPES = ["rag_api", "mysql", "postgres", "redis", "http_api", "url_crawl"]
+SOURCE_TYPES = ["rag_api", "mysql", "postgres", "redis", "http_api", "url_crawl", "local_file"]
 
 
 class KnowledgeSource(Base):
@@ -20,6 +20,9 @@ class KnowledgeSource(Base):
     config_json: Mapped[dict] = mapped_column(JSON, default=dict)  # 连接配置（加密敏感字段）
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     description: Mapped[str] = mapped_column(Text, default="")
+    # 文件上传 & 嵌入进度
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True, default=None)  # uploading/processing/indexing/completed/failed
+    file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     last_test_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
     last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
@@ -35,6 +38,7 @@ class KnowledgeSource(Base):
             "id": self.id, "agent_id": self.agent_id, "owner_id": self.owner_id,
             "name": self.name, "source_type": self.source_type, "url": self.url,
             "config_json": cfg, "enabled": self.enabled, "description": self.description,
+            "status": self.status, "file_path": self.file_path,
             "last_test_at": self.last_test_at.isoformat() if self.last_test_at else None,
             "last_test_ok": self.last_test_ok,
             "created_at": self.created_at.isoformat() if self.created_at else None,

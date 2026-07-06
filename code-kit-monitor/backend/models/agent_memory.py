@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from models import Base
 
 CHANNELS = ["web", "feishu", "dingtalk", "wechat_work", "api", "slack", "telegram"]
-MEMORY_TYPES = ["preference", "fact", "conversation", "context", "decision"]
+MEMORY_TYPES = ["preference", "fact", "conversation", "context", "decision", "document"]
 
 
 class AgentMemory(Base):

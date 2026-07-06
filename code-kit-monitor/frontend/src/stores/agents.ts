@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 export interface Agent {
   id: number; owner_id: string; name: string; description: string;
-  runtime: 'langchain' | 'langgraph'; model_provider: string; model_name: string;
+  runtime: 'langchain' | 'langgraph' | 'autogen' | 'crewai' | 'codex' | 'custom'; model_provider: string; model_name: string;
   model_config_json: any; api_key: string;
   domain_id: number | null;
   workflow_id: number | null; workflow_summary?: any;

@@ -1,7 +1,5 @@
 """对话服务 — 消息路由 + Agent LLM 调用 + 会话管理."""
 import datetime
-import json
-import urllib.request
 from sqlalchemy.orm import Session
 from models.agent import Agent
 from models.channel_config import ChannelConfig
@@ -10,6 +8,7 @@ from models.message import Message
 from services.encryption_service import encrypt, decrypt
 from services.audit_service import log_audit
 from services.runtime_tracer import tracer
+from services.llm_providers import get_provider, SUPPORTED_PROVIDERS
 
 _ATTACK_PREFIXES = [
     "ignore all previous instructions",
@@ -99,35 +98,27 @@ class ChatService:
             user_content += "\n\n[系统提示：你的消息超过长度限制，以上基于前 {} 字符回复]".format(MAX_MESSAGE_LENGTH)
         messages.append({"role": "user", "content": user_content})
 
-        # 7. 调用 LLM
+        # 7. 调用 LLM（通过提供者适配器）
         try:
             api_key = decrypt(agent.api_key_encrypted) if agent.api_key_encrypted else ""
-            if agent.model_provider in ("openai", "ollama"):
-                base_url = "https://api.openai.com/v1" if agent.model_provider == "openai" else "http://localhost:11434/v1"
-                req_body = json.dumps({"model": agent.model_name or "gpt-3.5-turbo", "messages": messages}).encode("utf-8")
-                req = urllib.request.Request(
-                    f"{base_url}/chat/completions",
-                    data=req_body,
-                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"} if api_key else {"Content-Type": "application/json"},
-                )
-                resp = urllib.request.urlopen(req, timeout=60)
-                data = json.loads(resp.read().decode("utf-8"))
-                if resp.status >= 400:
-                    raise RuntimeError(f"LLM API 返回 {resp.status}")
-                reply = data["choices"][0]["message"]["content"]
-                # 运行时埋点：记录真实 token 消耗
-                usage = data.get("usage", {})
-                tracer.trace_model_call(
-                    entity_type="agent", entity_id=agent_id, owner_id=owner_id,
-                    model_name=agent.model_name or "unknown",
-                    prompt_tokens=usage.get("prompt_tokens", len(content) // 4),
-                    completion_tokens=usage.get("completion_tokens", len(reply) // 4),
-                    duration_ms=0,
-                    tool_name="chat", tool_calls=1,
-                    status="success"
-                )
-            else:
-                reply = f"[Agent {agent.name}]: 收到消息「{content[:100]}」，但 model_provider={agent.model_provider} 暂不支持。"
+            provider = get_provider(agent.model_provider)
+            reply, usage = provider.chat(
+                messages, api_key,
+                agent.model_name or "gpt-3.5-turbo",
+            )
+            # 运行时埋点：记录真实 token 消耗
+            tracer.trace_model_call(
+                entity_type="agent", entity_id=agent_id, owner_id=owner_id,
+                model_name=agent.model_name or "unknown",
+                prompt_tokens=usage.get("prompt_tokens", len(content) // 4),
+                completion_tokens=usage.get("completion_tokens", len(reply) // 4),
+                duration_ms=0,
+                tool_name="chat", tool_calls=1,
+                status="success"
+            )
+        except ValueError as e:
+            # 未知 provider → 友好提示
+            reply = f"[Agent {agent.name}]: 收到消息「{content[:100]}」，但 {e}"
         except Exception as e:
             agent_msg.content = "Agent 暂时无法回复，请稍后重试"
             agent_msg.status = "error"

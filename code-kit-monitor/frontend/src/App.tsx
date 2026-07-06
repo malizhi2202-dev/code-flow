@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Activity, GitBranch, Users, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon, AlertCircle, Wrench, Bot, Network, FolderKanban, BarChart3, Link2, MessageSquare, Radio } from 'lucide-react';
+import { Activity, GitBranch, Users, ChevronLeft, PanelLeft, Shield, FileSearch, User as UserIcon, AlertCircle, Wrench, Bot, Network, FolderKanban, BarChart3, Link2, MessageSquare, Radio, Bell, BookOpen } from 'lucide-react';
 import Home from './pages/Home';
 import Detail from './pages/Detail';
 import Roles from './pages/Roles';
@@ -29,6 +29,9 @@ import MonitoringDashboard from './pages/MonitoringDashboard';
 import ConversationCenter from './pages/ConversationCenter';
 import ProjectManager from './pages/ProjectManager';
 import ProjectDetail from './pages/ProjectDetail';
+import AlertsPage from './pages/AlertsPage';
+import KnowledgeBase from './pages/KnowledgeBase';
+import ApprovalPage from './pages/ApprovalPage';
 import UserArea from './components/UserSelect';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useAuth } from './stores/auth';
@@ -54,6 +57,8 @@ const NAV: NavItem[] = [
   { id: 'orchestration', label: '编排', icon: <Network size={16} /> },
   { id: 'monitor', label: '监控', icon: <BarChart3 size={16} /> },
   { id: 'projects', label: '项目', icon: <FolderKanban size={16} /> },
+  { id: 'knowledge', label: '知识库', icon: <BookOpen size={16} /> },
+  { id: 'approvals', label: '审批', icon: <Shield size={16} /> },
 ];
 
 const ADMIN_NAV: NavItem[] = [
@@ -80,7 +85,10 @@ type View =
   | { page: 'users' }
   | { page: 'audit' }
   | { page: 'templates' }
-  | { page: 'profile' };
+  | { page: 'profile' }
+  | { page: 'alerts' }
+  | { page: 'knowledge' }
+  | { page: 'approvals' };
 
 export default function App() {
   const getInitialNav = () => {
@@ -101,6 +109,20 @@ export default function App() {
   const [agentSaveError, setAgentSaveError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const { isAdmin, rolePermissions, fetchMe, fetchUsers, loaded } = useAuth();
+  const [alertCount, setAlertCount] = useState(0);
+
+  // 轮询告警数量
+  useEffect(() => {
+    const pollAlerts = () => {
+      fetch('/api/alerts/count')
+        .then(r => r.json())
+        .then(d => setAlertCount(d.unacknowledged || 0))
+        .catch(() => {});
+    };
+    pollAlerts();
+    const t = setInterval(pollAlerts, 15000);
+    return () => clearInterval(t);
+  }, []);
 
   // 未登录 → 显示登录页
   const userId = localStorage.getItem('current_user_id');
@@ -227,6 +249,9 @@ export default function App() {
       case 'monitor': return perm('project:read') ? <MonitoringDashboard /> : <EmptyPerm />;
       case 'projects': return perm('project:read') ? <ProjectManager onSelect={(id) => setProjectDetailId(id)} /> : <EmptyPerm />;
       case 'profile': return <UserCenter onBack={() => navigate('projects')} />;
+      case 'alerts': return <AlertsPage />;
+      case 'knowledge': return perm('project:read') ? <KnowledgeBase /> : <EmptyPerm />;
+      case 'approvals': return perm('project:read') ? <ApprovalPage /> : <EmptyPerm />;
       default: return <ProjectManager onSelect={(id) => setProjectDetailId(id)} />;
     }
   };
@@ -305,6 +330,35 @@ export default function App() {
 
         {/* 底部：用户信息 + 登出 + 状态 + 折叠 */}
         <div style={{ padding: '8px', borderTop: '1px solid var(--border)' }}>
+          {/* 告警按钮 */}
+          <button
+            onClick={() => navigate('alerts')}
+            aria-label="告警中心"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              width: '100%', padding: collapsed ? '8px 0' : '7px 10px',
+              marginBottom: 6, borderRadius: 'var(--r-sm)',
+              background: nav === 'alerts' ? 'var(--bg-selected)' : 'transparent',
+              border: 'none', color: nav === 'alerts' ? 'var(--blue)' : alertCount > 0 ? 'var(--red)' : 'var(--text-secondary)',
+              cursor: 'pointer', fontSize: 13, fontWeight: nav === 'alerts' ? 600 : 400,
+              transition: 'all var(--fast)',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              position: 'relative' as const,
+            }}
+          >
+            <Bell size={16} />
+            {!collapsed && <span>告警中心</span>}
+            {alertCount > 0 && (
+              <span style={{
+                position: 'absolute', top: 2, right: collapsed ? -2 : 8,
+                background: 'var(--red)', color: '#fff', borderRadius: 10,
+                padding: '0px 5px', fontSize: 10, fontWeight: 700,
+                minWidth: 16, textAlign: 'center', lineHeight: '16px',
+              }}>
+                {alertCount > 99 ? '99+' : alertCount}
+              </span>
+            )}
+          </button>
           <UserArea collapsed={collapsed} onNavigateProfile={() => navigate('profile')} />
           <button
             onClick={() => setCollapsed(!collapsed)}

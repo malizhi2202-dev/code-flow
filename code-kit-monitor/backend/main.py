@@ -1,4 +1,5 @@
 """code-kit-monitor FastAPI 入口."""
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +32,105 @@ from routes.channel_api import router as channel_router
 from routes.control_plane_api import router as control_plane_router
 from routes.domain_api import router as domain_router
 from routes.gateway_api import router as gateway_router
+from routes.alerts_api import router as alerts_router
+from routes.human_approval_api import router as human_approval_router
+
+
+async def _cron_scheduler_loop():
+    """后台定时任务调度器 — 每 30s 检查 cron 表达式."""
+    import datetime
+    import calendar
+    from database import SessionLocal
+    from models.scheduled_task import ScheduledTask
+
+    print("[cron] 定时任务调度器已启动，每 30s 检查一次")
+
+    while True:
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            break
+
+        try:
+            now = datetime.datetime.utcnow()
+            db = SessionLocal()
+            try:
+                tasks = db.query(ScheduledTask).filter(
+                    ScheduledTask.enabled == True,
+                ).all()
+
+                for task in tasks:
+                    if _cron_matches(task.cron_expr, now, task.last_run):
+                        print(f"[cron] 触发任务: agent={task.agent_id} capability={task.capability} cron={task.cron_expr}")
+                        task.last_run = now
+                        db.commit()
+                        # 异步调用 agent run（不阻塞调度器）
+                        try:
+                            import urllib.request
+                            import json as _json
+                            data = _json.dumps({}).encode("utf-8")
+                            req = urllib.request.Request(
+                                f"http://127.0.0.1:8000/api/agents/{task.agent_id}/run",
+                                data=data,
+                                method="POST",
+                                headers={
+                                    "Content-Type": "application/json",
+                                    "X-User-Id": task.owner_id,
+                                },
+                            )
+                            urllib.request.urlopen(req, timeout=10)
+                        except Exception as e:
+                            print(f"[cron] 触发失败 agent={task.agent_id}: {e}")
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"[cron] 调度器错误: {e}")
+
+
+def _cron_matches(cron_expr: str, now, last_run) -> bool:
+    """简单 cron 表达式匹配（5 字段：分 时 日 月 周）.
+    返回 True 表示当前时间匹配且距离上次运行超过 60 秒."""
+    import datetime
+    try:
+        parts = cron_expr.strip().split()
+        if len(parts) != 5:
+            return False
+
+        minute, hour, day, month, weekday = parts
+
+        def _matches(field: str, value: int) -> bool:
+            if field == "*":
+                return True
+            if field == str(value):
+                return True
+            if "/" in field:
+                step = int(field.split("/")[1])
+                return value % step == 0
+            if "," in field:
+                return str(value) in field.split(",")
+            return False
+
+        # 检查每个字段
+        if not _matches(minute, now.minute):
+            return False
+        if not _matches(hour, now.hour):
+            return False
+        if not _matches(day, now.day):
+            return False
+        if not _matches(month, now.month):
+            return False
+
+        # weekday: 0=Monday, 6=Sunday (Python datetime: 0=Monday)
+        if not _matches(weekday, now.weekday()):
+            return False
+
+        # 避免同一分钟内重复触发
+        if last_run and (now - last_run).total_seconds() < 55:
+            return False
+
+        return True
+    except Exception:
+        return False
 
 
 @asynccontextmanager
@@ -59,13 +159,23 @@ async def lifespan(app: FastAPI):
     # 启动 Agent 探针服务（每 3s 采集 Agent 健康状态）
     from services.agent_probe_service import probe_service
     probe_service.start()
+    # 启动告警服务（每 30s 检测）
+    from services.alert_service import alert_service
+    alert_service.start()
     # 启动 metrics 模拟数据生成器（仅 METRICS_DEMO=true 时启用）
     import os
     if os.getenv("METRICS_DEMO", "").lower() in ("1", "true", "yes"):
         from services.metrics_scheduler import start_scheduler
         start_scheduler(owner_id="admin", interval_seconds=300)
         print("[monitor] 📊 演示数据生成器已启动（每 5min）")
+    # 启动定时任务 cron 调度器
+    _cron_task = asyncio.create_task(_cron_scheduler_loop())
     yield
+    _cron_task.cancel()
+    try:
+        await _cron_task
+    except asyncio.CancelledError:
+        pass
     print("[monitor] 关闭.")
 
 
@@ -176,6 +286,8 @@ app.include_router(channel_router)
 app.include_router(control_plane_router)
 app.include_router(domain_router)
 app.include_router(gateway_router)
+app.include_router(alerts_router)
+app.include_router(human_approval_router)
 
 
 @app.get("/api/ping")

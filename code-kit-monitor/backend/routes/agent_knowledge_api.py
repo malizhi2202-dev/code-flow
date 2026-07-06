@@ -1,10 +1,12 @@
 """Agent 资料源 + 跨渠道记忆 API."""
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from database import get_db
 from models.knowledge_source import KnowledgeSource, SOURCE_TYPES
 from models.agent_memory import AgentMemory, CHANNELS, MEMORY_TYPES
 import datetime
+import os
+import threading
 
 router = APIRouter(prefix="/api/agents", tags=["agent-knowledge"])
 
@@ -29,14 +31,43 @@ def _get_agent_domain_id(agent_id: int, db: Session) -> int | None:
 # ═══════════════════════════════════════════
 
 @router.get("/{agent_id}/knowledge-sources")
-def list_sources(agent_id: int, request: Request, db: Session = Depends(get_db)):
-    """获取 Agent 的所有资料源."""
+def list_sources(agent_id: int, request: Request, tag: str | None = None, db: Session = Depends(get_db)):
+    """获取 Agent 的所有资料源，支持按标签过滤."""
     owner_id = _uid(request)
-    sources = db.query(KnowledgeSource).filter(
+    q = db.query(KnowledgeSource).filter(
         KnowledgeSource.agent_id == agent_id,
         KnowledgeSource.owner_id == owner_id,
-    ).order_by(KnowledgeSource.created_at.desc()).all()
-    return [s.to_dict() for s in sources]
+    )
+    # 标签过滤
+    if tag:
+        from models.knowledge_tag import KnowledgeTag, KnowledgeSourceTag
+        # 查找匹配 tag name 的 source_id 列表
+        tag_obj = db.query(KnowledgeTag).filter(
+            KnowledgeTag.name == tag,
+            KnowledgeTag.owner_id == owner_id,
+        ).first()
+        if tag_obj:
+            source_ids = db.query(KnowledgeSourceTag.source_id).filter(
+                KnowledgeSourceTag.tag_id == tag_obj.id
+            ).all()
+            sid_list = [row[0] for row in source_ids]
+            q = q.filter(KnowledgeSource.id.in_(sid_list))
+        else:
+            # tag 不存在，返回空结果
+            return []
+    sources = q.order_by(KnowledgeSource.created_at.desc()).all()
+    # 附加标签信息
+    result = []
+    for s in sources:
+        d = s.to_dict()
+        # 查询标签
+        from models.knowledge_tag import KnowledgeTag, KnowledgeSourceTag
+        tag_rows = db.query(KnowledgeTag).join(
+            KnowledgeSourceTag, KnowledgeSourceTag.tag_id == KnowledgeTag.id
+        ).filter(KnowledgeSourceTag.source_id == s.id).all()
+        d["tags"] = [t.to_dict() for t in tag_rows]
+        result.append(d)
+    return result
 
 
 @router.post("/{agent_id}/knowledge-sources")
@@ -149,6 +180,310 @@ def test_source(agent_id: int, source_id: int, request: Request, db: Session = D
     ks.last_test_ok = ok
     db.commit()
     return {"ok": ok, "detail": detail}
+
+
+# ═══════════════════════════════════════════
+# 文件上传
+# ═══════════════════════════════════════════
+
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".py", ".js", ".json"}
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+UPLOAD_BASE_DIR = os.path.join(os.path.dirname(__file__), "..", "uploads")
+
+
+def _sanitize_filename(filename: str) -> str:
+    """防止路径遍历攻击：去除路径分隔符和危险字符."""
+    import re
+    # 只保留文件名部分（去除路径）
+    basename = os.path.basename(filename)
+    # 去除所有路径分隔符和特殊字符，只保留字母数字中文下划线连字符点
+    safe = re.sub(r'[^\w\u4e00-\u9fff\-.]', '_', basename)
+    # 去除连续下划线
+    safe = re.sub(r'_+', '_', safe)
+    # 去除开头结尾的下划线/点
+    safe = safe.strip('_.')
+    if not safe:
+        safe = "unnamed_file"
+    return safe
+
+
+def _extract_text(file_path: str, ext: str) -> str:
+    """从文件中提取文本内容."""
+    if ext in (".txt", ".md", ".py", ".js", ".json"):
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            return f.read()
+    elif ext == ".pdf":
+        try:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(file_path)
+            text = ""
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+            return text.strip()
+        except Exception as e:
+            raise RuntimeError(f"PDF 解析失败: {str(e)}")
+    elif ext == ".docx":
+        try:
+            from docx import Document
+            doc = Document(file_path)
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            return "\n\n".join(paragraphs)
+        except Exception as e:
+            raise RuntimeError(f"DOCX 解析失败: {str(e)}")
+    else:
+        raise RuntimeError(f"不支持的文件类型: {ext}")
+
+
+def _chunk_text(text: str, filename: str, max_chars: int = 2000) -> list[tuple[str, str]]:
+    """按段落分块，每块最大 max_chars 字符.
+    
+    返回 [(key, chunk_text), ...] 列表.
+    """
+    # 按空行分割段落
+    paragraphs = text.split("\n\n")
+    
+    chunks: list[tuple[str, str]] = []
+    current_chunk: list[str] = []
+    current_len = 0
+    chunk_idx = 0
+    
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+        
+        para_len = len(para)
+        
+        # 如果单个段落超过 max_chars，强制分割
+        if para_len > max_chars:
+            # 先保存当前 chunk
+            if current_chunk:
+                key = f"{filename}_chunk_{chunk_idx}"
+                chunks.append((key, "\n\n".join(current_chunk)))
+                chunk_idx += 1
+                current_chunk = []
+                current_len = 0
+            
+            # 对超长段落按字符分割
+            for i in range(0, para_len, max_chars):
+                sub = para[i:i + max_chars]
+                key = f"{filename}_chunk_{chunk_idx}"
+                chunks.append((key, sub))
+                chunk_idx += 1
+            continue
+        
+        # 如果加入后超过限制，先保存当前 chunk
+        if current_len + para_len + (2 if current_chunk else 0) > max_chars:
+            key = f"{filename}_chunk_{chunk_idx}"
+            chunks.append((key, "\n\n".join(current_chunk)))
+            chunk_idx += 1
+            current_chunk = [para]
+            current_len = para_len
+        else:
+            current_chunk.append(para)
+            current_len += para_len + (2 if current_chunk else 0)
+    
+    # 保存最后一个 chunk
+    if current_chunk:
+        key = f"{filename}_chunk_{chunk_idx}"
+        chunks.append((key, "\n\n".join(current_chunk)))
+    
+    return chunks
+
+
+def _process_document_async(ks_id: int, agent_id: int, file_path: str):
+    """后台处理文档：提取文本 → 分块 → 存储到 agent_memories."""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        ks = db.query(KnowledgeSource).filter(KnowledgeSource.id == ks_id).first()
+        if not ks:
+            return
+        
+        # ── 阶段 1: 文本提取 ──
+        ks.status = "processing"
+        ks.updated_at = datetime.datetime.utcnow()
+        db.commit()
+        
+        ext = os.path.splitext(file_path)[1].lower()
+        text = _extract_text(file_path, ext)
+        if not text or not text.strip():
+            raise RuntimeError("提取的文本内容为空")
+        
+        # ── 阶段 2: 分块 + 索引存储 ──
+        ks.status = "indexing"
+        ks.updated_at = datetime.datetime.utcnow()
+        db.commit()
+        
+        cfg = ks.config_json or {}
+        original_filename = cfg.get("filename", os.path.basename(file_path))
+        chunks = _chunk_text(text, original_filename)
+        
+        # 获取 domain_id
+        from models.agent import Agent
+        ag = db.query(Agent).filter(Agent.id == agent_id).first()
+        dom_id = ag.domain_id if ag else None
+        
+        # 删除该文件之前的旧 chunks
+        old_chunks = db.query(AgentMemory).filter(
+            AgentMemory.agent_id == agent_id,
+            AgentMemory.memory_type == "document",
+            AgentMemory.key.like(f"{original_filename}_chunk_%"),
+        ).all()
+        for oc in old_chunks:
+            db.delete(oc)
+        db.commit()
+        
+        # 存入新 chunks
+        import json as _json
+        for key, chunk_text in chunks:
+            mem = AgentMemory(
+                agent_id=agent_id,
+                owner_id=ks.owner_id,
+                domain_id=dom_id,
+                channel="web",
+                key=key,
+                value=_json.dumps({"text": chunk_text, "source_id": ks_id}, ensure_ascii=False),
+                memory_type="document",
+                priority=5,
+            )
+            db.add(mem)
+        db.commit()
+        
+        # ── 阶段 3: 完成 ──
+        ks.status = "indexed"
+        ks.config_json = {
+            **cfg,
+            "chunks": len(chunks),
+            "total_chars": len(text),
+        }
+        ks.updated_at = datetime.datetime.utcnow()
+        db.commit()
+        print(f"[upload] 文件处理完成: {file_path}, 分块数: {len(chunks)}, 总字符: {len(text)}")
+        
+    except Exception as e:
+        print(f"[upload] 文件处理失败: {e}")
+        try:
+            ks = db.query(KnowledgeSource).filter(KnowledgeSource.id == ks_id).first()
+            if ks:
+                ks.status = "failed"
+                ks.description = f"处理失败: {str(e)[:200]}"
+                ks.updated_at = datetime.datetime.utcnow()
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+@router.post("/{agent_id}/knowledge-sources/upload")
+def upload_file(
+    agent_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    name: str = Form(default=""),
+    description: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    """上传本地文件作为知识源（PDF/DOCX/TXT/MD/PY/JS/JSON），最大 10MB."""
+    owner_id = _uid(request)
+
+    # 验证文件扩展名
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    _, ext = os.path.splitext(file.filename)
+    ext = ext.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: {ext}，支持: {sorted(ALLOWED_EXTENSIONS)}"
+        )
+
+    # 读取文件内容（检查大小）
+    contents = file.file.read()
+    if len(contents) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件过大: {len(contents)} bytes，最大允许 {MAX_UPLOAD_SIZE} bytes (10MB)"
+        )
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="文件内容为空")
+
+    # 安全文件名（防止路径遍历）
+    safe_filename = _sanitize_filename(file.filename)
+    timestamp = int(datetime.datetime.utcnow().timestamp())
+    stored_filename = f"{timestamp}_{safe_filename}"
+
+    # 确保上传目录存在
+    upload_dir = os.path.join(UPLOAD_BASE_DIR, str(agent_id))
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_path = os.path.join(upload_dir, stored_filename)
+    # 最终安全检查：确保 file_path 在 upload_dir 内
+    real_upload_dir = os.path.realpath(upload_dir)
+    real_file_path = os.path.realpath(file_path)
+    if not real_file_path.startswith(real_upload_dir + os.sep) and real_file_path != real_upload_dir:
+        raise HTTPException(status_code=400, detail="非法文件路径")
+
+    try:
+        with open(file_path, "wb") as f:
+            f.write(contents)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"文件保存失败: {str(e)}")
+
+    # 创建知识源记录
+    ks = KnowledgeSource(
+        agent_id=agent_id,
+        owner_id=owner_id,
+        name=name or safe_filename,
+        source_type="local_file",
+        url=f"file://{file_path}",
+        config_json={"filename": safe_filename, "size_bytes": len(contents), "extension": ext},
+        enabled=True,
+        description=description,
+        status="uploading",
+        file_path=file_path,
+    )
+    db.add(ks)
+    db.commit()
+    db.refresh(ks)
+
+    # 启动后台处理
+    t = threading.Thread(target=_process_document_async, args=(ks.id, agent_id, file_path), daemon=True)
+    t.start()
+
+    return {"ok": True, "source": ks.to_dict()}
+
+
+@router.get("/{agent_id}/knowledge-sources/{source_id}/status")
+def get_source_status(agent_id: int, source_id: int, request: Request, db: Session = Depends(get_db)):
+    """查询资料源的索引/处理状态."""
+    owner_id = _uid(request)
+    ks = db.query(KnowledgeSource).filter(
+        KnowledgeSource.id == source_id,
+        KnowledgeSource.agent_id == agent_id,
+        KnowledgeSource.owner_id == owner_id,
+    ).first()
+    if not ks:
+        raise HTTPException(status_code=404, detail="资料源不存在")
+    
+    # 统计 chunks 数量
+    cfg = ks.config_json or {}
+    chunks_count = cfg.get("chunks", 0)
+    
+    return {
+        "id": ks.id,
+        "name": ks.name,
+        "source_type": ks.source_type,
+        "status": ks.status or "unknown",
+        "chunks": chunks_count,
+        "filename": cfg.get("filename", ks.name),
+        "file_path": ks.file_path,
+        "created_at": ks.created_at.isoformat() if ks.created_at else None,
+        "updated_at": ks.updated_at.isoformat() if ks.updated_at else None,
+    }
 
 
 # ═══════════════════════════════════════════
@@ -413,3 +748,126 @@ def load_recent_memories(agent_id: int, payload: dict | None = None, request: Re
         "memories": results,
         "loaded_count": len(results),
     }
+
+
+# ═══════════════════════════════════════════
+# 知识库标签 CRUD
+# ═══════════════════════════════════════════
+
+@router.get("/knowledge/tags")
+def list_tags(request: Request, db: Session = Depends(get_db)):
+    """获取当前用户的所有标签."""
+    from models.knowledge_tag import KnowledgeTag
+    owner_id = _uid(request)
+    tags = db.query(KnowledgeTag).filter(
+        KnowledgeTag.owner_id == owner_id,
+    ).order_by(KnowledgeTag.created_at.desc()).all()
+    return [t.to_dict() for t in tags]
+
+
+@router.post("/knowledge/tags")
+def create_tag(payload: dict, request: Request, db: Session = Depends(get_db)):
+    """创建标签."""
+    from models.knowledge_tag import KnowledgeTag
+    owner_id = _uid(request)
+    tag = KnowledgeTag(
+        name=payload.get("name", "").strip(),
+        color=payload.get("color", "#3b82f6"),
+        owner_id=owner_id,
+    )
+    if not tag.name:
+        raise HTTPException(status_code=400, detail="标签名称不能为空")
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    return {"ok": True, "tag": tag.to_dict()}
+
+
+@router.put("/knowledge/tags/{tag_id}")
+def update_tag(tag_id: int, payload: dict, request: Request, db: Session = Depends(get_db)):
+    """更新标签."""
+    from models.knowledge_tag import KnowledgeTag
+    owner_id = _uid(request)
+    tag = db.query(KnowledgeTag).filter(
+        KnowledgeTag.id == tag_id,
+        KnowledgeTag.owner_id == owner_id,
+    ).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="标签不存在")
+    if "name" in payload:
+        tag.name = payload["name"].strip()
+    if "color" in payload:
+        tag.color = payload["color"]
+    db.commit()
+    db.refresh(tag)
+    return {"ok": True, "tag": tag.to_dict()}
+
+
+@router.delete("/knowledge/tags/{tag_id}")
+def delete_tag(tag_id: int, request: Request, db: Session = Depends(get_db)):
+    """删除标签（级联删除关联）."""
+    from models.knowledge_tag import KnowledgeTag, KnowledgeSourceTag
+    owner_id = _uid(request)
+    tag = db.query(KnowledgeTag).filter(
+        KnowledgeTag.id == tag_id,
+        KnowledgeTag.owner_id == owner_id,
+    ).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="标签不存在")
+    # 删除关联
+    db.query(KnowledgeSourceTag).filter(KnowledgeSourceTag.tag_id == tag_id).delete()
+    db.delete(tag)
+    db.commit()
+    return {"ok": True}
+
+
+# ═══════════════════════════════════════════
+# 资料源—标签关联
+# ═══════════════════════════════════════════
+
+@router.post("/knowledge-sources/{source_id}/tags")
+def add_source_tag(source_id: int, payload: dict, request: Request, db: Session = Depends(get_db)):
+    """为资料源添加标签."""
+    from models.knowledge_tag import KnowledgeTag, KnowledgeSourceTag
+    owner_id = _uid(request)
+    tag_id = payload.get("tag_id")
+    if not tag_id:
+        raise HTTPException(status_code=400, detail="缺少 tag_id")
+
+    # 验证 tag 归属
+    tag = db.query(KnowledgeTag).filter(
+        KnowledgeTag.id == tag_id,
+        KnowledgeTag.owner_id == owner_id,
+    ).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="标签不存在")
+
+    # 检查是否已关联
+    existing = db.query(KnowledgeSourceTag).filter(
+        KnowledgeSourceTag.source_id == source_id,
+        KnowledgeSourceTag.tag_id == tag_id,
+    ).first()
+    if existing:
+        return {"ok": True, "source_tag": existing.to_dict(), "tag": tag.to_dict()}
+
+    st = KnowledgeSourceTag(source_id=source_id, tag_id=tag_id)
+    db.add(st)
+    db.commit()
+    db.refresh(st)
+    return {"ok": True, "source_tag": st.to_dict(), "tag": tag.to_dict()}
+
+
+@router.delete("/knowledge-sources/{source_id}/tags/{tag_id}")
+def remove_source_tag(source_id: int, tag_id: int, request: Request, db: Session = Depends(get_db)):
+    """从资料源移除标签."""
+    from models.knowledge_tag import KnowledgeSourceTag
+    owner_id = _uid(request)
+    st = db.query(KnowledgeSourceTag).filter(
+        KnowledgeSourceTag.source_id == source_id,
+        KnowledgeSourceTag.tag_id == tag_id,
+    ).first()
+    if not st:
+        raise HTTPException(status_code=404, detail="关联不存在")
+    db.delete(st)
+    db.commit()
+    return {"ok": True}

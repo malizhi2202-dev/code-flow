@@ -4,6 +4,8 @@ from sqlalchemy import String, Integer, DateTime, Text, JSON, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from models import Base
 
+SUPPORTED_RUNTIMES = frozenset({"langchain", "langgraph", "autogen", "crewai", "codex", "custom"})
+
 
 class Agent(Base):
     __tablename__ = "agents"
@@ -12,7 +14,7 @@ class Agent(Base):
     owner_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
-    runtime: Mapped[str] = mapped_column(String(16), default="langgraph")
+    runtime: Mapped[str] = mapped_column(String(32), default="langgraph")
     model_provider: Mapped[str] = mapped_column(String(64), nullable=False)
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
     model_config_json: Mapped[dict] = mapped_column(JSON, default=dict)

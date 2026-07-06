@@ -91,42 +91,44 @@ function HostMetricsCard({ host }: { host: any }) {
   );
 }
 
-// ── B8: Agent 指标卡片 ──
-function AgentMetricsCard({ agents, onSelectAgent }: { agents: any[]; onSelectAgent: (id: number) => void }) {
-  if (!agents || agents.length === 0) return null;
+// ── 延迟百分位卡片 ──
+function LatencyCard({ latency }: { latency: any }) {
+  if (!latency) return null;
+  var items = [
+    { label: 'P50', value: latency.p50_ms ? (latency.p50_ms / 1000).toFixed(2) + 's' : '-', color: '#5cb878' },
+    { label: 'P95', value: latency.p95_ms ? (latency.p95_ms / 1000).toFixed(2) + 's' : '-', color: '#e8a450' },
+    { label: 'P99', value: latency.p99_ms ? (latency.p99_ms / 1000).toFixed(2) + 's' : '-', color: '#e05555' },
+    { label: '平均', value: latency.avg_ms ? (latency.avg_ms / 1000).toFixed(2) + 's' : '-', color: '#548cf0' },
+  ];
   return (
-    <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 16, border: '1px solid var(--border)', marginBottom: 16 }}>
-      <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px 0', color: '#b47cd8' }}>🤖 Agent 模型速率</h3>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-          <thead><tr style={{ borderBottom: '1px solid var(--border)' }}>
-            <th style={th}>Agent</th>
-            <th style={{ ...th, textAlign: 'right' }}>Token 已用</th>
-            <th style={{ ...th, textAlign: 'right' }}>剩余</th>
-            <th style={th}>用量</th>
-          </tr></thead>
-          <tbody>
-            {agents.map(function(a) {
-              var usagePct = a.token_hard_limit > 0 ? Math.round(a.total_tokens_used / a.token_hard_limit * 100) : 0;
-              var remaining = Math.max(0, (a.token_hard_limit || 0) - (a.total_tokens_used || 0));
-              var color = usagePct > 80 ? 'var(--red)' : usagePct > 50 ? 'var(--orange)' : 'var(--green)';
-              return (
-                <tr key={a.id} style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={function() { onSelectAgent(a.id); }}>
-                  <td style={td}>{a.name}</td>
-                  <td style={{ ...td, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>{(a.total_tokens_used || 0).toLocaleString()}</td>
-                  <td style={{ ...td, fontFamily: 'var(--font-mono)', textAlign: 'right', color }}>{remaining.toLocaleString()}</td>
-                  <td style={td}>
-                    <div style={{ height: 6, background: 'var(--bg-input)', borderRadius: 3, width: 100, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: usagePct + '%', background: color, borderRadius: 3 }} />
-                    </div>
-                    <span style={{ fontSize: 9, color }}>{usagePct}%</span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+    <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 20, border: '1px solid var(--border)', marginBottom: 16 }}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px 0', color: 'var(--blue)' }}>⏱ 延迟分析（{latency.sample_count || 0} 样本）</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        {items.map(function(item) {
+          return (
+            <div key={item.label} style={{ background: 'var(--bg-input)', borderRadius: 6, padding: '12px 10px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 4 }}>{item.label}</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 700, color: item.color }}>{item.value}</div>
+            </div>
+          );
+        })}
       </div>
+      {/* 延迟分布条 */}
+      {latency.p50_ms > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>最小 {latency.min_ms ? (latency.min_ms / 1000).toFixed(2) + 's' : '-'}</span>
+          <div style={{ flex: 1, height: 8, background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+            {latency.max_ms > 0 && (
+              <>
+                <div style={{ position: 'absolute', left: '50%', height: '100%', width: 2, background: '#5cb878', borderRadius: 1 }} title="P50" />
+                <div style={{ position: 'absolute', left: '95%', height: '100%', width: 2, background: '#e8a450', borderRadius: 1 }} title="P95" />
+                <div style={{ position: 'absolute', left: '99%', height: '100%', width: 2, background: '#e05555', borderRadius: 1 }} title="P99" />
+              </>
+            )}
+          </div>
+          <span style={{ fontSize: 10, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>最大 {latency.max_ms ? (latency.max_ms / 1000).toFixed(2) + 's' : '-'}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -137,23 +139,30 @@ export default function MonitoringDashboard() {
   const [live, setLive] = useState<any>({});
   const [rankings, setRankings] = useState<any[]>([]);
   const [rankDim, setRankDim] = useState('agent');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [latency, setLatency] = useState<any>(null);
 
   const fetchAll = function() {
     var uid = localStorage.getItem('current_user_id') || 'admin';
+    var sessionUrl = statusFilter && statusFilter !== 'all'
+      ? '/api/metrics/sessions?limit=200&status=' + statusFilter
+      : '/api/metrics/sessions?limit=200';
     Promise.all([
       fetch('/api/metrics/entity-breakdown?minutes=1440', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
-      fetch('/api/metrics/sessions?limit=200', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
+      fetch(sessionUrl, { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
       fetch('/api/metrics/live?minutes=1440', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
       fetch('/api/metrics/rankings?dimension=' + rankDim + '&top=10&minutes=1440', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
+      fetch('/api/runtime/stats?days=7', {}).then(function(r) { return r.json(); }).catch(function() { return {}; }),
     ]).then(function(results) {
       setBreakdown(results[0]);
       setSessions(results[1].sessions || []);
       setLive(results[2]);
       setRankings(Array.isArray(results[3]) ? results[3] : []);
+      setLatency(results[4].latency || null);
     }).catch(function() {});
   };
 
-  useEffect(function() { fetchAll(); var t = setInterval(fetchAll, 30000); return function() { clearInterval(t); }; }, [rankDim]);
+  useEffect(function() { fetchAll(); var t = setInterval(fetchAll, 30000); return function() { clearInterval(t); }; }, [rankDim, statusFilter]);
 
   // 汇总计算
   var allItems = (breakdown?.tools || []).concat(breakdown?.workflows || []).concat(breakdown?.agents || []).concat(breakdown?.projects || []);
@@ -171,7 +180,6 @@ export default function MonitoringDashboard() {
       modelItems.push({ name: mn, tokens: live.by_model[mn], calls: 0, total_ms: 0 });
     }
   }
-  // 从 sessions 补全模型调用次数
   for (var mi = 0; mi < modelItems.length; mi++) {
     var mc = 0; var mm = 0;
     for (var si = 0; si < sessions.length; si++) {
@@ -181,7 +189,7 @@ export default function MonitoringDashboard() {
     modelItems[mi].total_ms = mm;
   }
 
-  // 命中率统计（工具命中次数 / 总调用次数）
+  // 命中率统计
   var hitItems: EntityItem[] = [];
   var toolHitMap: Record<string, { hits: number; total: number; ms: number }> = {};
   for (var si2 = 0; si2 < sessions.length; si2++) {
@@ -235,6 +243,9 @@ export default function MonitoringDashboard() {
         </div>
       </div>
 
+      {/* 延迟百分位卡片 */}
+      <LatencyCard latency={latency} />
+
       <EntityTable title="🔧 工具消耗排行" items={breakdown?.tools} color="#548cf0" />
       <EntityTable title="🔀 工作流消耗排行" items={breakdown?.workflows} color="#5cb878" />
       <EntityTable title="🤖 Agent 消耗排行" items={breakdown?.agents} color="#e8a450" />
@@ -243,14 +254,29 @@ export default function MonitoringDashboard() {
       <EntityTable title="📁 项目消耗排行" items={breakdown?.projects} color="#e05555" />
 
       <div style={{ background: 'var(--bg-card)', borderRadius: 8, padding: 16, border: '1px solid var(--border)' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px 0' }}>📜 最近会话审计日志（{sessions.length} 条）</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>📜 最近会话审计日志（{sessions.length} 条）</h3>
+          <select
+            value={statusFilter}
+            onChange={function(e: React.ChangeEvent<HTMLSelectElement>) { setStatusFilter(e.target.value); }}
+            style={{
+              padding: '4px 8px', fontSize: 11, borderRadius: 4,
+              border: '1px solid var(--border)', background: 'var(--bg-input)',
+              color: 'var(--text)', cursor: 'pointer',
+            }}
+          >
+            <option value="all">全部状态</option>
+            <option value="success">✅ 成功</option>
+            <option value="error">❌ 失败</option>
+          </select>
+        </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
             <thead><tr style={{ borderBottom: '1px solid var(--border)' }}>
-              <th style={th}>时间</th><th style={th}>模型</th><th style={th}>实体</th><th style={th}>工具</th><th style={{ ...th, textAlign: 'right' }}>Token</th><th style={th}>状态</th>
+              <th style={th}>时间</th><th style={th}>模型</th><th style={th}>实体</th><th style={th}>工具</th><th style={{ ...th, textAlign: 'right' }}>Token</th><th style={{ ...th, textAlign: 'right' }}>耗时(ms)</th><th style={th}>状态</th>
             </tr></thead>
             <tbody>
-              {sessions.length === 0 && <tr><td colSpan={6} style={{ padding: 30, textAlign: 'center', color: 'var(--text-dim)' }}>暂无会话</td></tr>}
+              {sessions.length === 0 && <tr><td colSpan={7} style={{ padding: 30, textAlign: 'center', color: 'var(--text-dim)' }}>暂无会话</td></tr>}
               {sessions.map(function(s, i) {
                 return (
                   <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
@@ -259,6 +285,7 @@ export default function MonitoringDashboard() {
                     <td style={td}>{s.entity_type}</td>
                     <td style={{ ...td, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{nameMap(s.tool_name || '-')}</td>
                     <td style={{ ...td, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>{s.total_tokens ? s.total_tokens.toLocaleString() : '0'}</td>
+                    <td style={{ ...td, fontFamily: 'var(--font-mono)', textAlign: 'right', color: s.duration_ms > 5000 ? 'var(--red)' : 'var(--text)' }}>{s.duration_ms || 0}ms</td>
                     <td style={td}><span style={{ padding: '2px 6px', borderRadius: 2, fontSize: 9, background: s.status === 'success' ? 'var(--green-bg)' : 'var(--red-bg)', color: s.status === 'success' ? 'var(--green)' : 'var(--red)' }}>{s.status === 'success' ? 'OK' : 'ERR'}</span></td>
                   </tr>
                 );

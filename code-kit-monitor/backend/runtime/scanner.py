@@ -231,6 +231,16 @@ class RuntimeScanner:
         for e in events:
             sid = e.get('change_id', '') or e.get('agent', '') or 'unknown'
             if sid not in session_map:
+                # 推断状态：如果事件有 status 字段则用，否则根据 stage 推断
+                raw_status = e.get('status', '')
+                if raw_status in ('success', 'error', 'running'):
+                    inferred_status = raw_status
+                elif e.get('stage') in ('7-integration', '6-review'):
+                    inferred_status = 'success'
+                elif e.get('stage') == '':
+                    inferred_status = 'running'
+                else:
+                    inferred_status = 'running'
                 session_map[sid] = {
                     'session_id': sid,
                     'agent': e.get('agent', ''),
@@ -238,6 +248,7 @@ class RuntimeScanner:
                     'timestamp': e.get('timestamp', ''),
                     'stage': e.get('stage', ''),
                     'change_id': e.get('change_id', ''),
+                    'status': inferred_status,
                     'input_tokens': 0,
                     'output_tokens': 0,
                     'message_count': 0,
@@ -246,4 +257,10 @@ class RuntimeScanner:
             session_map[sid]['input_tokens'] += e.get('tokens_input', 0)
             session_map[sid]['output_tokens'] += e.get('tokens_output', 0)
             session_map[sid]['message_count'] += 1
+            # 如果有更"成功"的状态（success > running > error），取最佳
+            e_status = e.get('status', '')
+            if e_status == 'success':
+                session_map[sid]['status'] = 'success'
+            elif e_status == 'error' and session_map[sid]['status'] != 'success':
+                session_map[sid]['status'] = 'error'
         return sorted(session_map.values(), key=lambda s: s['timestamp'], reverse=True)

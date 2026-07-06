@@ -5,6 +5,8 @@ from database import get_db
 from models.agent import Agent
 from services.encryption_service import encrypt
 from services.audit_service import log_audit
+from services.llm_providers import SUPPORTED_PROVIDERS
+from models.agent import SUPPORTED_RUNTIMES
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
@@ -41,7 +43,15 @@ def api_list_agents(status: str | None = None, domain_id: int | None = None, cap
 def api_create_agent(payload: dict, request: Request = None, db: Session = Depends(get_db)):
     user = _user(request)
     api_key = payload.get("api_key", "") or "not_set"
-    agent = Agent(owner_id=user["id"], name=payload["name"], description=payload.get("description", ""), runtime=payload.get("runtime", "langgraph"), model_provider=payload.get("model_provider", "openai"), model_name=payload.get("model_name", ""), model_config_json=payload.get("model_config_json", {}), api_key_encrypted=encrypt(api_key), workflow_id=payload.get("workflow_id"), token_soft_limit=payload.get("token_soft_limit", 800000), token_hard_limit=payload.get("token_hard_limit", 1000000), domain_id=payload.get("domain_id"))
+    # 验证 model_provider
+    model_provider = payload.get("model_provider", "openai")
+    if model_provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"不支持的 model_provider: '{model_provider}'。支持: {sorted(SUPPORTED_PROVIDERS)}")
+    # 验证 runtime
+    runtime = payload.get("runtime", "langgraph")
+    if runtime not in SUPPORTED_RUNTIMES:
+        raise HTTPException(status_code=400, detail=f"不支持的 runtime: '{runtime}'。支持: {sorted(SUPPORTED_RUNTIMES)}")
+    agent = Agent(owner_id=user["id"], name=payload["name"], description=payload.get("description", ""), runtime=runtime, model_provider=model_provider, model_name=payload.get("model_name", ""), model_config_json=payload.get("model_config_json", {}), api_key_encrypted=encrypt(api_key), workflow_id=payload.get("workflow_id"), token_soft_limit=payload.get("token_soft_limit", 800000), token_hard_limit=payload.get("token_hard_limit", 1000000), domain_id=payload.get("domain_id"))
     db.add(agent)
     db.commit()
     db.refresh(agent)
@@ -73,7 +83,13 @@ def api_update_agent(agent_id: int, payload: dict, request: Request = None, db: 
         raise HTTPException(status_code=404, detail="Agent 不存在")
     for f in ("name", "description", "model_provider", "model_name", "model_config_json", "workflow_id", "token_soft_limit", "token_hard_limit", "domain_id"):
         if f in payload:
+            if f == "model_provider" and payload[f] not in SUPPORTED_PROVIDERS:
+                raise HTTPException(status_code=400, detail=f"不支持的 model_provider: '{payload[f]}'。支持: {sorted(SUPPORTED_PROVIDERS)}")
             setattr(a, f, payload[f])
+    if "runtime" in payload:
+        if payload["runtime"] not in SUPPORTED_RUNTIMES:
+            raise HTTPException(status_code=400, detail=f"不支持的 runtime: '{payload['runtime']}'。支持: {sorted(SUPPORTED_RUNTIMES)}")
+        a.runtime = payload["runtime"]
     if "api_key" in payload and payload["api_key"]:
         a.api_key_encrypted = encrypt(payload["api_key"])
     db.commit()
@@ -175,3 +191,89 @@ def api_stop_agent(agent_id: int, request: Request = None, db: Session = Depends
 
     log_audit(user["id"], user.get("name", user["id"]), "agent.stop", a.name, "agent", "stopped", request.client.host if request.client else "127.0.0.1")
     return {"status": "stopped"}
+
+
+# ═══════════════════════════════════════════
+# 定时任务 CRUD
+# ═══════════════════════════════════════════
+
+@router.get("/{agent_id}/scheduled-tasks")
+def api_list_scheduled_tasks(agent_id: int, request: Request = None, db: Session = Depends(get_db)):
+    """获取 Agent 的所有定时任务."""
+    from models.scheduled_task import ScheduledTask
+    user = _user(request)
+    tasks = db.query(ScheduledTask).filter(
+        ScheduledTask.agent_id == agent_id,
+        ScheduledTask.owner_id == user["id"],
+    ).order_by(ScheduledTask.created_at.desc()).all()
+    return [t.to_dict() for t in tasks]
+
+
+@router.post("/{agent_id}/scheduled-tasks")
+def api_create_scheduled_task(agent_id: int, payload: dict, request: Request = None, db: Session = Depends(get_db)):
+    """为 Agent 创建定时任务."""
+    from models.scheduled_task import ScheduledTask
+    import datetime as dt
+    user = _user(request)
+    task = ScheduledTask(
+        agent_id=agent_id,
+        name=payload.get("name", ""),
+        cron_expr=payload.get("cron_expr", ""),
+        capability=payload.get("capability", ""),
+        enabled=payload.get("enabled", True),
+        owner_id=user["id"],
+        last_run=None,
+        created_at=dt.datetime.utcnow(),
+        updated_at=dt.datetime.utcnow(),
+    )
+    if not task.cron_expr:
+        raise HTTPException(status_code=400, detail="cron_expr 不能为空")
+    if not task.capability:
+        raise HTTPException(status_code=400, detail="capability 不能为空")
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    log_audit(user["id"], user.get("name", user["id"]), "scheduled_task.create", task.name or task.capability, "scheduled_task", "created", request.client.host if request.client else "127.0.0.1")
+    return {"ok": True, "task": task.to_dict()}
+
+
+@router.put("/{agent_id}/scheduled-tasks/{task_id}")
+def api_update_scheduled_task(agent_id: int, task_id: int, payload: dict, request: Request = None, db: Session = Depends(get_db)):
+    """更新定时任务."""
+    from models.scheduled_task import ScheduledTask
+    import datetime as dt
+    user = _user(request)
+    task = db.query(ScheduledTask).filter(
+        ScheduledTask.id == task_id,
+        ScheduledTask.agent_id == agent_id,
+        ScheduledTask.owner_id == user["id"],
+    ).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="定时任务不存在")
+    for field in ["name", "cron_expr", "capability"]:
+        if field in payload:
+            setattr(task, field, payload[field])
+    if "enabled" in payload:
+        task.enabled = bool(payload["enabled"])
+    task.updated_at = dt.datetime.utcnow()
+    db.commit()
+    db.refresh(task)
+    return {"ok": True, "task": task.to_dict()}
+
+
+@router.delete("/{agent_id}/scheduled-tasks/{task_id}")
+def api_delete_scheduled_task(agent_id: int, task_id: int, request: Request = None, db: Session = Depends(get_db)):
+    """删除定时任务."""
+    from models.scheduled_task import ScheduledTask
+    user = _user(request)
+    task = db.query(ScheduledTask).filter(
+        ScheduledTask.id == task_id,
+        ScheduledTask.agent_id == agent_id,
+        ScheduledTask.owner_id == user["id"],
+    ).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="定时任务不存在")
+    db.delete(task)
+    db.commit()
+    log_audit(user["id"], user.get("name", user["id"]), "scheduled_task.delete", task.name or task.capability, "scheduled_task", "deleted", request.client.host if request.client else "127.0.0.1")
+    return {"ok": True}
