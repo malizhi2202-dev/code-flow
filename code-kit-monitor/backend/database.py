@@ -14,6 +14,16 @@ engine = create_engine(
     pool_pre_ping=True if "mysql" in DATABASE_URL else False,
     pool_recycle=3600,
 )
+
+# ── SQLite WAL 模式（允许并发读 + 一写，解决 "database is locked"）──
+if "sqlite" in DATABASE_URL:
+    from sqlalchemy import event
+    @event.listens_for(engine, "connect")
+    def _set_wal(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
