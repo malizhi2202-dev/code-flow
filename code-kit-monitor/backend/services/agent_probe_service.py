@@ -49,7 +49,7 @@ def _resolve_health_url(agent: Agent) -> str | None:
 class ProbeService:
     """Agent 健康探针服务 — 后台 asyncio 任务持续监控所有 Agent 健康状态."""
 
-    def __init__(self, interval: int = 3, timeout: int = 5, failure_threshold: int = 3, retention_days: int = 7):
+    def __init__(self, interval: int = 3, timeout: int = 5, failure_threshold: int = 3, retention_days: int = 1):
         self.interval = interval          # 探针间隔（秒）
         self.timeout = timeout            # HTTP 请求超时（秒）
         self.failure_threshold = failure_threshold  # 连续失败阈值
@@ -287,7 +287,18 @@ class ProbeService:
             detail=detail_sanitized,
             consecutive_failures=consecutive,
         )
-        db.add(probe)
+        # upsert：同一 agent+probe_type 只保留最新一条，避免百万级堆积
+        existing = db.query(AgentProbe).filter(
+            AgentProbe.agent_id == agent_id,
+            AgentProbe.probe_type == "health",
+        ).order_by(AgentProbe.created_at.desc()).first()
+        if existing:
+            existing.status = probe.status
+            existing.detail = probe.detail
+            existing.consecutive_failures = probe.consecutive_failures
+            existing.created_at = datetime.utcnow()
+        else:
+            db.add(probe)
 
     # ── 数据清理 ────────────────────────────────────────────────
 
