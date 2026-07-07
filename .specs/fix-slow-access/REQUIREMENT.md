@@ -104,6 +104,30 @@
 | V1.6 | 审计全部 12 个 store + 页面级 fetch，统一接入去重层 |
 | V1.7 | 全量回归测试（接口 + 前端交互） |
 
+## 补充发现（2026-07-07 浏览器 console 日志）
+
+### 500 错误风暴 + SQLite 锁死
+
+浏览器 console 暴露了更严重的问题：`/api/control-plane/probes`、`/api/control-plane/queue`、`/api/approvals?limit=100` 三个端点持续返回 500 Internal Server Error，根因是 **SQLite 数据库锁死**（`OperationalError: database is locked`）。
+
+因果链：
+1. 前端 140+ 并发请求（重复 + 轮询泄漏）→ SQLite DELETE journal mode 单写锁
+2. 大量请求排队 → busy timeout 5s 后抛出 `database is locked`
+3. 前端 `res.json()` 在 HTML 错误页上抛出 `SyntaxError`（未捕获）
+4. `setInterval` 无视 500 错误继续重试 → 更多请求 → 锁死加剧
+
+### 审批页轮询泄漏（新增）
+
+`ApprovalPage.tsx:43` 有 `setInterval(fetchApprovals, N)` 轮询，同样在页面离开后不清理，且 500 错误后持续重试。
+
+### 影响修正
+
+| 原 v1 项 | 修正 |
+|---|---|
+| V1.3 App.tsx alerts/count | → 扩大到所有 setInterval 页面（含 ApprovalPage） |
+| — | 新增 V1.8：所有 store fetch 添加 `.catch()` 错误处理，500 时标记 error 状态而非崩溃 |
+| — | 后端不在此 change 范围，但 DESIGN 建议附注 SQLite WAL 模式切换方案 |
+
 ### v2（后续优化）
 
 | 编号 | 内容 |
