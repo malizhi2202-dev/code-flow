@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { BarChart3, RefreshCw } from 'lucide-react';
+import { safeFetch } from '../utils/requestDedup';
 
 interface EntityItem { name: string; tokens: number; calls: number; total_ms: number; }
 
@@ -143,26 +144,32 @@ export default function MonitoringDashboard() {
   const [latency, setLatency] = useState<any>(null);
 
   const fetchAll = function() {
-    var uid = localStorage.getItem('current_user_id') || 'admin';
     var sessionUrl = statusFilter && statusFilter !== 'all'
       ? '/api/metrics/sessions?limit=200&status=' + statusFilter
       : '/api/metrics/sessions?limit=200';
     Promise.all([
-      fetch('/api/metrics/entity-breakdown?minutes=1440', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
-      fetch(sessionUrl, { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
-      fetch('/api/metrics/live?minutes=1440', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
-      fetch('/api/metrics/rankings?dimension=' + rankDim + '&top=10&minutes=1440', { headers: { 'X-User-Id': uid } }).then(function(r) { return r.json(); }),
-      fetch('/api/runtime/stats?days=7', {}).then(function(r) { return r.json(); }).catch(function() { return {}; }),
+      safeFetch('/api/metrics/entity-breakdown?minutes=1440').then(function(r) { return r.data; }),
+      safeFetch(sessionUrl).then(function(r) { return r.data; }),
+      safeFetch('/api/metrics/live?minutes=1440').then(function(r) { return r.data; }),
+      safeFetch('/api/metrics/rankings?dimension=' + rankDim + '&top=10&minutes=1440').then(function(r) { return r.data; }),
+      safeFetch('/api/runtime/stats?days=7').then(function(r) { return r.data; }).catch(function() { return null; }),
     ]).then(function(results) {
       setBreakdown(results[0]);
-      setSessions(results[1].sessions || []);
-      setLive(results[2]);
+      setSessions((results[1] && results[1].sessions) || []);
+      setLive(results[2] || {});
       setRankings(Array.isArray(results[3]) ? results[3] : []);
-      setLatency(results[4].latency || null);
+      setLatency((results[4] && results[4].latency) || null);
     }).catch(function() {});
   };
 
-  useEffect(function() { fetchAll(); var t = setInterval(fetchAll, 30000); return function() { clearInterval(t); }; }, [rankDim, statusFilter]);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(function() {
+    fetchAll();
+    intervalRef.current = setInterval(fetchAll, 30000);
+    return function() {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [statusFilter]);  // rankDim 变化不重新 fetchAll（tab 切换 0 次调用）
 
   // 汇总计算
   var allItems = (breakdown?.tools || []).concat(breakdown?.workflows || []).concat(breakdown?.agents || []).concat(breakdown?.projects || []);

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Radio, Circle, Activity, RefreshCw, Clock, XCircle,
   Play, Pause, RotateCcw, X, Server, Cpu, BarChart3, Link2,
@@ -1288,17 +1288,20 @@ export default function AgentControlPlane() {
   const [activeTab, setActiveTab] = useState<TabKey>('agents');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // 初始加载 + 3 秒轮询
+  // 初始加载 + 3 秒轮询（useRef 防泄漏）
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(function() {
     fetchProbes();
     fetchQueue();
     fetchReconcile();
-    const interval = setInterval(function() {
+    intervalRef.current = setInterval(function() {
       fetchProbes();
       fetchQueue();
       fetchReconcile();
     }, 3000);
-    return function() { clearInterval(interval); };
+    return function() {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [fetchProbes, fetchQueue, fetchReconcile]);
 
   const selectedAgentData = selectedAgent !== null

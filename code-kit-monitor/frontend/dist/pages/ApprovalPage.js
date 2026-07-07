@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CheckCircle, XCircle, Clock, ShieldCheck, Loader2, MessageSquare } from 'lucide-react';
+import { safeFetch, invalidateCache } from '../utils/requestDedup';
 const uid = () => localStorage.getItem('current_user_id') || 'admin';
 export default function ApprovalPage() {
     const [approvals, setApprovals] = useState([]);
@@ -12,23 +13,20 @@ export default function ApprovalPage() {
     const [message, setMessage] = useState('');
     const fetchApprovals = async () => {
         setLoading(true);
-        try {
-            const res = await fetch('/api/approvals?limit=100', { headers: { 'X-User-Id': uid() } });
-            const data = await res.json();
-            setApprovals(data.approvals || []);
+        const result = await safeFetch('/api/approvals?limit=100');
+        if (result.ok && result.data) {
+            setApprovals(result.data.approvals || []);
         }
-        catch {
-            setApprovals([]);
-        }
-        finally {
-            setLoading(false);
-        }
+        setLoading(false);
     };
+    const intervalRef = useRef(null);
     useEffect(() => {
         fetchApprovals();
-        // Autorefresh every 10s
-        const t = setInterval(fetchApprovals, 10000);
-        return () => clearInterval(t);
+        intervalRef.current = setInterval(fetchApprovals, 10000);
+        return () => {
+            if (intervalRef.current)
+                clearInterval(intervalRef.current);
+        };
     }, []);
     const handleRespond = async () => {
         if (!selectedApproval)
@@ -48,6 +46,7 @@ export default function ApprovalPage() {
                 setMessage(responseStatus === 'approved' ? '✅ 已批准' : '❌ 已拒绝');
                 setSelectedApproval(null);
                 setResponseText('');
+                invalidateCache('/api/approvals?limit=100');
                 fetchApprovals();
             }
             else {

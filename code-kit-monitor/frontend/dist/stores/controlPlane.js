@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 export const useControlPlane = create((set, get) => ({
     probes: [],
     queue: [],
@@ -7,21 +8,18 @@ export const useControlPlane = create((set, get) => ({
     loading: false,
     fetchProbes: async () => {
         set({ loading: true });
-        const res = await fetch('/api/control-plane/probes');
-        const data = await res.json();
-        set({ probes: Array.isArray(data) ? data : (data.probes || []), loading: false });
+        const result = await safeFetch('/api/control-plane/probes');
+        set({ probes: (result.ok && result.data ? (Array.isArray(result.data) ? result.data : (result.data.probes || [])) : []), loading: false });
     },
     fetchQueue: async () => {
         set({ loading: true });
-        const res = await fetch('/api/control-plane/queue');
-        const data = await res.json();
-        set({ queue: Array.isArray(data) ? data : (data.queue || []), loading: false });
+        const result = await safeFetch('/api/control-plane/queue');
+        set({ queue: (result.ok && result.data ? (Array.isArray(result.data) ? result.data : (result.data.queue || [])) : []), loading: false });
     },
     fetchReconcile: async () => {
         set({ loading: true });
-        const res = await fetch('/api/control-plane/reconcile');
-        const data = await res.json();
-        set({ reconcile: Array.isArray(data) ? data : (data.entries || []), loading: false });
+        const result = await safeFetch('/api/control-plane/reconcile');
+        set({ reconcile: (result.ok && result.data ? (Array.isArray(result.data) ? result.data : (result.data.entries || [])) : []), loading: false });
     },
     restartAgent: async (agentId) => {
         const res = await fetch(`/api/control-plane/agent/${agentId}/restart`, {

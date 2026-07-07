@@ -36,6 +36,7 @@ import ApprovalPage from './pages/ApprovalPage';
 import UserArea from './components/UserSelect';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useAuth } from './stores/auth';
+import { safeFetch } from './utils/requestDedup';
 function EmptyPerm() {
     return (_jsxs("div", { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: 12 }, children: [_jsx(AlertCircle, { size: 40, style: { opacity: 0.3 } }), _jsx("p", { style: { fontSize: 14 }, children: "\u6682\u65E0\u6B64\u529F\u80FD\u6743\u9650" }), _jsx("p", { style: { fontSize: 11 }, children: "\u8BF7\u8054\u7CFB\u7BA1\u7406\u5458\u5206\u914D\u76F8\u5E94\u6743\u9650" })] }));
 }
@@ -79,16 +80,17 @@ export default function App() {
     const [collapsed, setCollapsed] = useState(false);
     const { isAdmin, rolePermissions, fetchMe, fetchUsers, loaded } = useAuth();
     const [alertCount, setAlertCount] = useState(0);
-    // 轮询告警数量
+    // 轮询告警数量（接入去重层，降低频率 15s → 30s）
     useEffect(() => {
         const pollAlerts = () => {
-            fetch('/api/alerts/count')
-                .then(r => r.json())
-                .then(d => setAlertCount(d.unacknowledged || 0))
-                .catch(() => { });
+            safeFetch('/api/alerts/count').then(result => {
+                if (result.ok && result.data) {
+                    setAlertCount(result.data.unacknowledged || 0);
+                }
+            });
         };
         pollAlerts();
-        const t = setInterval(pollAlerts, 15000);
+        const t = setInterval(pollAlerts, 30000);
         return () => clearInterval(t);
     }, []);
     // 未登录 → 显示登录页

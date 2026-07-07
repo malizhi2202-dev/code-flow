@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 function getUserId() {
     return localStorage.getItem('current_user_id') || '';
 }
@@ -15,25 +16,22 @@ export const useAuth = create((set, get) => ({
             set({ loaded: true });
             return;
         }
-        try {
-            const res = await fetch('/api/auth/me', { headers: { 'X-User-Id': uid } });
-            if (res.status === 401) {
-                // 用户已被删除，清除本地缓存
-                localStorage.removeItem('current_user_id');
-                set({ loaded: true });
-                return;
-            }
-            const data = await res.json();
-            const u = data.user;
+        const result = await safeFetch('/api/auth/me');
+        if (result.ok && result.data) {
+            const u = result.data.user;
             set({
                 currentUser: u,
                 isAdmin: u?.role === 'admin',
                 loaded: true,
-                rolePermissions: data.role_permissions || [],
-                permissionDefs: data.permissions || {},
+                rolePermissions: result.data.role_permissions || [],
+                permissionDefs: result.data.permissions || {},
             });
         }
-        catch {
+        else if (result.status === 401) {
+            localStorage.removeItem('current_user_id');
+            set({ loaded: true });
+        }
+        else {
             set({ loaded: true });
         }
     },
@@ -41,17 +39,14 @@ export const useAuth = create((set, get) => ({
         const uid = getUserId();
         if (!uid)
             return;
-        try {
-            const res = await fetch('/api/auth/users', { headers: { 'X-User-Id': uid } });
-            if (res.status === 403) {
-                // 非 admin 用户无权限获取用户列表，正常
-                set({ userList: [] });
-                return;
-            }
-            const data = await res.json();
-            set({ userList: data.users || [] });
+        const result = await safeFetch('/api/auth/users');
+        if (result.ok && result.data) {
+            set({ userList: result.data.users || [] });
         }
-        catch { /* silently ignore */ }
+        else if (result.status === 403) {
+            set({ userList: [] });
+        }
+        // silently ignore other errors
     },
     logout: () => {
         localStorage.removeItem('current_user_id');

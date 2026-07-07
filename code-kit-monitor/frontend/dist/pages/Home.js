@@ -1,11 +1,19 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useChanges, filteredChanges } from '../stores/changes';
 import ChangeCard from '../components/ChangeCard';
 import { Search, PanelTop } from 'lucide-react';
 export default function Home({ onSelect }) {
     const { changes, summary: s, loading, filter, fetchChanges } = useChanges();
-    useEffect(() => { fetchChanges(); const t = setInterval(fetchChanges, 5000); return () => clearInterval(t); }, [fetchChanges]);
+    const intervalRef = useRef(null);
+    useEffect(() => {
+        fetchChanges();
+        intervalRef.current = setInterval(fetchChanges, 5000);
+        return () => {
+            if (intervalRef.current)
+                clearInterval(intervalRef.current);
+        };
+    }, [fetchChanges]);
     const list = filteredChanges(changes, filter);
     if (loading && list.length === 0) {
         return (_jsx("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }, children: _jsxs("div", { style: { textAlign: 'center' }, children: [_jsx("div", { style: { width: 32, height: 32, borderRadius: '50%', border: '2px solid var(--border)', borderTopColor: 'var(--blue)', animation: 'spin 0.7s linear infinite', margin: '0 auto 16px' } }), _jsx("p", { style: { color: 'var(--text-muted)', fontSize: 13 }, children: "\u626B\u63CF .specs/ ..." })] }) }));

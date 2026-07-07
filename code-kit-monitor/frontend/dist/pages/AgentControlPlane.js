@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Radio, Activity, RefreshCw, Clock, XCircle, Pause, RotateCcw, X, Server, Cpu, BarChart3, Link2, Layers, Plus, Trash2, ChevronRight, GitBranch, CopyPlus, AlertTriangle, } from 'lucide-react';
 import { useControlPlane } from '../stores/controlPlane';
 import { useDomains } from '../stores/domains';
@@ -521,17 +521,21 @@ export default function AgentControlPlane() {
     const { probes, queue, reconcile, selectedAgent, loading, fetchProbes, fetchQueue, fetchReconcile, restartAgent, setSelectedAgent, } = useControlPlane();
     const [activeTab, setActiveTab] = useState('agents');
     const [actionLoading, setActionLoading] = useState(null);
-    // 初始加载 + 3 秒轮询
+    // 初始加载 + 3 秒轮询（useRef 防泄漏）
+    const intervalRef = useRef(null);
     useEffect(function () {
         fetchProbes();
         fetchQueue();
         fetchReconcile();
-        const interval = setInterval(function () {
+        intervalRef.current = setInterval(function () {
             fetchProbes();
             fetchQueue();
             fetchReconcile();
         }, 3000);
-        return function () { clearInterval(interval); };
+        return function () {
+            if (intervalRef.current)
+                clearInterval(intervalRef.current);
+        };
     }, [fetchProbes, fetchQueue, fetchReconcile]);
     const selectedAgentData = selectedAgent !== null
         ? probes.find(function (a) { return a.agent_id === selectedAgent; }) || null

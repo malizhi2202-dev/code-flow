@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 const uid = () => localStorage.getItem('current_user_id') || 'admin';
 export const useOrchestration = create((set, get) => ({
     orchestrations: [], loading: false,
@@ -16,9 +17,8 @@ export const useOrchestration = create((set, get) => ({
     metricData: null,
     fetchOrchestrations: async () => {
         set({ loading: true });
-        const res = await fetch('/api/orchestration', { headers: { 'X-User-Id': uid() } });
-        const data = await res.json();
-        set({ orchestrations: Array.isArray(data) ? data : [], loading: false });
+        const result = await safeFetch('/api/orchestration');
+        set({ orchestrations: (result.ok && result.data ? (Array.isArray(result.data) ? result.data : []) : []), loading: false });
     },
     fetchDetail: async (id) => {
         const res = await fetch(`/api/orchestration/${id}`, { headers: { 'X-User-Id': uid() } });

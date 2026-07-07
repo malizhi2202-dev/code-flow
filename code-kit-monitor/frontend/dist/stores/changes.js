@@ -1,17 +1,12 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 export const useChanges = create((set, get) => ({
     changes: [], summary: null, loading: false,
     filter: { q: '', status: 'all', phase: 'all' },
     fetchChanges: async () => {
         set({ loading: true });
-        try {
-            const res = await fetch('/api/changes');
-            const data = await res.json();
-            set({ changes: data.changes || [], summary: data.summary || null, loading: false });
-        }
-        catch {
-            set({ loading: false });
-        }
+        const result = await safeFetch('/api/changes');
+        set({ changes: (result.ok && result.data ? result.data.changes : []) || [], summary: (result.ok && result.data ? result.data.summary : null) || null, loading: false });
     },
     setFilter: (f) => set((s) => ({ filter: { ...s.filter, ...f } })),
 }));

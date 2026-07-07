@@ -1,12 +1,12 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 const uid = () => localStorage.getItem('current_user_id') || 'admin';
 export const useAgents = create((set, get) => ({
     agents: [], loading: false,
     fetchAgents: async () => {
         set({ loading: true });
-        const res = await fetch('/api/agents', { headers: { 'X-User-Id': uid() } });
-        const data = await res.json();
-        set({ agents: data.agents || [], loading: false });
+        const result = await safeFetch('/api/agents');
+        set({ agents: (result.ok && result.data ? result.data.agents : []) || [], loading: false });
     },
     fetchAgentsByDomain: async (domainId) => {
         const params = domainId === null ? 'domain_id=0' : `domain_id=${domainId}`;

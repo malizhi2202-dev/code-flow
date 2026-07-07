@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useChanges, filteredChanges } from '../stores/changes';
 import ChangeCard from '../components/ChangeCard';
 import { Search, PanelTop } from 'lucide-react';
@@ -6,7 +6,14 @@ import { Search, PanelTop } from 'lucide-react';
 export default function Home({ onSelect }: { onSelect: (id: string) => void }) {
   const { changes, summary: s, loading, filter, fetchChanges } = useChanges();
 
-  useEffect(() => { fetchChanges(); const t = setInterval(fetchChanges, 5000); return () => clearInterval(t); }, [fetchChanges]);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    fetchChanges();
+    intervalRef.current = setInterval(fetchChanges, 5000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [fetchChanges]);
   const list = filteredChanges(changes, filter);
 
   if (loading && list.length === 0) {

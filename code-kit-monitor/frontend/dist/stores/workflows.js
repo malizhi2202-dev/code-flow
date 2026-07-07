@@ -1,12 +1,12 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 const uid = () => localStorage.getItem('current_user_id') || 'admin';
 export const useWorkflows = create((set, get) => ({
     workflows: [], loading: false,
     fetchWorkflows: async () => {
         set({ loading: true });
-        const res = await fetch('/api/workflows', { headers: { 'X-User-Id': uid() } });
-        const data = await res.json();
-        set({ workflows: data.workflows || [], loading: false });
+        const result = await safeFetch('/api/workflows');
+        set({ workflows: (result.ok && result.data ? result.data.workflows : []) || [], loading: false });
     },
     createWorkflow: async (payload) => {
         const res = await fetch('/api/workflows', {
