@@ -1,14 +1,14 @@
 """GET /api/changes/<id> — 单个 change 详情（开发者/Leader/PM 三维度）."""
 import os
 from fastapi import APIRouter, HTTPException
-from scanner import FileScanner, STAGE_NAMES, _phase_order
+from scanner import get_file_scanner, STAGE_NAMES, _phase_order
 from parsers.section import SectionParser
 from parsers.task import parse_tasks
 from parsers.gate import parse_gates
 from config import get_specs_dir
 
 router = APIRouter()
-_scanner = FileScanner()
+_scanner = get_file_scanner()
 
 
 def _read_artifact(change_dir: str, name: str) -> str | None:

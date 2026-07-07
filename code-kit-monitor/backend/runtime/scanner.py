@@ -264,3 +264,11 @@ class RuntimeScanner:
             elif e_status == 'error' and session_map[sid]['status'] != 'success':
                 session_map[sid]['status'] = 'error'
         return sorted(session_map.values(), key=lambda s: s['timestamp'], reverse=True)
+
+
+# 模块级单例 — 所有路由共享
+_runtime_scanner = RuntimeScanner()
+
+
+def get_runtime_scanner() -> RuntimeScanner:
+    return _runtime_scanner

@@ -90,13 +90,16 @@ def _read_kv(content: str, key: str) -> str:
     return m.group(1).strip() if m else ''
 
 
-def _count_tasks(change_dir: str) -> tuple[int, int, int, int]:
-    """(total, done, in_progress, blocked)."""
-    task_file = os.path.join(change_dir, 'TASK.md')
-    if not os.path.exists(task_file):
-        return 0, 0, 0, 0
+def _count_tasks(content: Optional[str] = None, change_dir: str = '') -> tuple[int, int, int, int]:
+    """(total, done, in_progress, blocked). 传入 content 避免重复读文件."""
     try:
-        content = open(task_file).read()
+        if content is None and change_dir:
+            task_file = os.path.join(change_dir, 'TASK.md')
+            if not os.path.exists(task_file):
+                return 0, 0, 0, 0
+            content = open(task_file).read()
+        if not content:
+            return 0, 0, 0, 0
         total = len(re.findall(r'status="(pending|in_progress|done|blocked)"', content))
         done = len(re.findall(r'status="done"', content))
         in_prog = len(re.findall(r'status="in_progress"', content))
@@ -106,7 +109,7 @@ def _count_tasks(change_dir: str) -> tuple[int, int, int, int]:
 
 
 def _count_done_tasks(change_dir: str) -> int:
-    return _count_tasks(change_dir)[1]
+    return _count_tasks(change_dir=change_dir)[1]
 
 
 def _check_interrupted(specs_dir: str, change_id: str) -> tuple[bool, Optional[str]]:
@@ -175,7 +178,7 @@ def _next_action(info: 'ChangeInfo') -> str:
     if idx < len(STAGES) - 1:
         next_stage = STAGES[idx + 1]
         if '4-dev' in info.phase:
-            total, done, _, _ = _count_tasks(os.path.join(get_specs_dir(), info.id))
+            total, done, _, _ = _count_tasks(change_dir=os.path.join(get_specs_dir(), info.id))
             pending = total - done
             if pending > 0: return f'还有 {pending} 个 task 待执行 — @code-kit/GO.md 执行 T<NN>'
             return '全部 task 完成 — 运行 G3 门禁后进入 5-test'
@@ -203,7 +206,14 @@ class FileScanner:
         for entry in sorted(os.listdir(self.specs_dir)):
             path = os.path.join(self.specs_dir, entry)
             if not os.path.isdir(path) or entry.startswith('.') or entry in ('archive', 'adr', 'health'): continue
-            total, done, in_prog, blocked = _count_tasks(path)
+            # 一次读取 TASK.md，用于 task 计数 + auto/manual 统计
+            task_content = ''
+            task_file = os.path.join(path, 'TASK.md')
+            if os.path.exists(task_file):
+                try:
+                    task_content = open(task_file, encoding='utf-8').read()
+                except: pass
+            total, done, in_prog, blocked = _count_tasks(content=task_content)
             interrupted, interrupted_task = _check_interrupted(self.specs_dir, entry)
             phase = _detect_phase(path)
             artifacts = [f for f in ARTIFACTS if os.path.exists(os.path.join(path, f))]
@@ -239,10 +249,10 @@ class FileScanner:
             if os.path.exists(os.path.join(path, 'DESIGN.md')):
                 design = open(os.path.join(path, 'DESIGN.md'), encoding='utf-8').read()
                 risks = _parse_risks(design)
-            # 门禁统计
+            # 门禁统计（只扫描 SUMMARY 和 REVIEW/TEST，跳过已读的大文件）
             gate_stats = {'total': 0, 'passed': 0, 'rejected': 0, 'conditional': 0, 'pending': 0}
             for fname in artifacts:
-                if fname.endswith('.md') and fname != 'TASK.md':
+                if fname.endswith('-SUMMARY.md') or fname in ('REVIEW.md', 'TEST.md'):
                     try:
                         content = open(os.path.join(path, fname), encoding='utf-8').read()
                         for m in re.finditer(r'结果[:：]\s*(.+?)(?:\n|$)', content):
@@ -253,14 +263,9 @@ class FileScanner:
                             elif '驳回' in r or '反对' in r: gate_stats['rejected'] += 1
                             else: gate_stats['pending'] += 1
                     except: pass
-            # task 统计
-            auto_count = 0
-            manual_count = 0
-            task_file = os.path.join(path, 'TASK.md')
-            if os.path.exists(task_file):
-                tc = open(task_file, encoding='utf-8').read()
-                auto_count = len(re.findall(r'<auto>true</auto>', tc))
-                manual_count = len(re.findall(r'<auto>false</auto>', tc))
+            # task 统计（复用 task_content，不重复读 TASK.md）
+            auto_count = len(re.findall(r'<auto>true</auto>', task_content)) if task_content else 0
+            manual_count = len(re.findall(r'<auto>false</auto>', task_content)) if task_content else 0
             pct = round(done / total * 100) if total > 0 else 0
             info = ChangeInfo(
                 id=entry, phase=phase, phase_name=STAGE_NAMES.get(phase, phase),
@@ -285,3 +290,11 @@ class FileScanner:
         for c in self.scan():
             if c.id == change_id: return c
         return None
+
+
+# 模块级单例 — 所有路由共享，让缓存生效
+_file_scanner = FileScanner()
+
+
+def get_file_scanner() -> FileScanner:
+    return _file_scanner

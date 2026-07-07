@@ -1,9 +1,9 @@
 """GET /api/search — 搜索过滤."""
 from fastapi import APIRouter, Query
-from scanner import FileScanner
+from scanner import get_file_scanner
 
 router = APIRouter()
-_scanner = FileScanner()
+_scanner = get_file_scanner()
 
 
 @router.get("/api/search")
@@ -12,7 +12,7 @@ async def search(
     status: str = Query(default="all", description="状态过滤: all/normal/interrupted/blocked"),
     phase: str = Query(default="all", description="阶段过滤: all/0-change/1-requirement/..."),
 ):
-    changes = _scanner.scan(force=True)
+    changes = _scanner.scan()
     results = []
     for c in changes:
         if q and q.lower() not in c.id.lower():

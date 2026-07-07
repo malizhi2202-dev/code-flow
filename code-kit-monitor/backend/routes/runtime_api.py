@@ -5,10 +5,10 @@ import time
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import StreamingResponse
-from runtime.scanner import RuntimeScanner
+from runtime.scanner import get_runtime_scanner
 
 router = APIRouter()
-_scanner = RuntimeScanner()
+_scanner = get_runtime_scanner()
 
 
 @router.get("/api/runtime/summary")

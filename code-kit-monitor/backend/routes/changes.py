@@ -1,14 +1,14 @@
 """GET /api/changes — 活跃 change 列表（含 Leader/PM 总览统计）."""
 from fastapi import APIRouter
-from scanner import FileScanner
+from scanner import get_file_scanner
 
 router = APIRouter()
-_scanner = FileScanner()
+_scanner = get_file_scanner()
 
 
 @router.get("/api/changes")
 async def list_changes():
-    changes = _scanner.scan(force=True)
+    changes = _scanner.scan()
 
     items = []
     for c in changes:
