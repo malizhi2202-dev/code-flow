@@ -13,6 +13,7 @@ import httpx
 from database import SessionLocal
 from models.agent import Agent
 from models.agent_probe import AgentProbe
+from models.agent_probe_latest import AgentProbeLatest
 
 logger = logging.getLogger(__name__)
 
@@ -287,18 +288,26 @@ class ProbeService:
             detail=detail_sanitized,
             consecutive_failures=consecutive,
         )
-        # upsert：同一 agent+probe_type 只保留最新一条，避免百万级堆积
-        existing = db.query(AgentProbe).filter(
-            AgentProbe.agent_id == agent_id,
-            AgentProbe.probe_type == "health",
-        ).order_by(AgentProbe.created_at.desc()).first()
-        if existing:
-            existing.status = probe.status
-            existing.detail = probe.detail
-            existing.consecutive_failures = probe.consecutive_failures
-            existing.created_at = datetime.utcnow()
+        db.add(probe)  # 历史表：保留完整记录
+
+        # 状态表：upsert 只留最新一条
+        latest = db.query(AgentProbeLatest).filter(
+            AgentProbeLatest.agent_id == agent_id,
+            AgentProbeLatest.probe_type == "health",
+        ).first()
+        if latest:
+            latest.status = effective_status
+            latest.detail = detail_sanitized
+            latest.consecutive_failures = consecutive
+            latest.created_at = datetime.utcnow()
         else:
-            db.add(probe)
+            db.add(AgentProbeLatest(
+                agent_id=agent_id,
+                probe_type="health",
+                status=effective_status,
+                detail=detail_sanitized,
+                consecutive_failures=consecutive,
+            ))
 
     # ── 数据清理 ────────────────────────────────────────────────
 

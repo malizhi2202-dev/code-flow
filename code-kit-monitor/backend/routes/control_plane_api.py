@@ -5,9 +5,8 @@ import threading
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from database import get_db
-from models.agent_probe import AgentProbe
+from models.agent_probe_latest import AgentProbeLatest
 from models.scheduler_queue import SchedulerQueue
 from models.agent import Agent
 from auth import is_admin, read_audit
@@ -66,31 +65,11 @@ def _check_rate_limit(user_id: str, max_requests: int = 10, window_seconds: int 
 
 @router.get("/probes")
 def list_probes(request: Request, db: Session = Depends(get_db)):
-    """查询所有 Agent 探针状态"""
-    # 按 agent 分组，每种探针类型取最新一条
-    from sqlalchemy import and_
-    subq = (
-        db.query(
-            AgentProbe.agent_id,
-            AgentProbe.probe_type,
-            func.max(AgentProbe.created_at).label("max_ts")
-        )
-        .group_by(AgentProbe.agent_id, AgentProbe.probe_type)
-        .subquery()
-    )
-    probes = (
-        db.query(AgentProbe)
-        .join(subq, and_(
-            AgentProbe.agent_id == subq.c.agent_id,
-            AgentProbe.probe_type == subq.c.probe_type,
-            AgentProbe.created_at == subq.c.max_ts,
-        ))
-        .all()
-    )
+    """查询所有 Agent 最新探针状态（从 agent_probe_latest 表，无 GROUP BY）"""
+    latest_probes = db.query(AgentProbeLatest).all()
 
-    # 按 agent_id 分组
-    agents_map = {}
-    for p in probes:
+    agents_map: dict[int, dict] = {}
+    for p in latest_probes:
         if p.agent_id not in agents_map:
             agent = db.query(Agent).filter(Agent.id == p.agent_id).first()
             agents_map[p.agent_id] = {
