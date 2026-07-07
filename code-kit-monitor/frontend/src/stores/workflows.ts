@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 
 export interface Workflow {
   id: number; owner_id: string; name: string; description: string;
@@ -26,9 +27,8 @@ export const useWorkflows = create<WorkflowsState>((set, get) => ({
   workflows: [], loading: false,
   fetchWorkflows: async () => {
     set({ loading: true });
-    const res = await fetch('/api/workflows', { headers: { 'X-User-Id': uid() } });
-    const data = await res.json();
-    set({ workflows: data.workflows || [], loading: false });
+    const result = await safeFetch('/api/workflows');
+    set({ workflows: (result.ok && result.data ? result.data.workflows : []) || [], loading: false });
   },
   createWorkflow: async (payload) => {
     const res = await fetch('/api/workflows', {

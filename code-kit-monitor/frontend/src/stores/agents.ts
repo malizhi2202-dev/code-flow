@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 
 export interface Agent {
   id: number; owner_id: string; name: string; description: string;
@@ -27,9 +28,8 @@ export const useAgents = create<AgentsState>((set, get) => ({
   agents: [], loading: false,
   fetchAgents: async () => {
     set({ loading: true });
-    const res = await fetch('/api/agents', { headers: { 'X-User-Id': uid() } });
-    const data = await res.json();
-    set({ agents: data.agents || [], loading: false });
+    const result = await safeFetch('/api/agents');
+    set({ agents: (result.ok && result.data ? result.data.agents : []) || [], loading: false });
   },
   fetchAgentsByDomain: async (domainId: number | null) => {
     const params = domainId === null ? 'domain_id=0' : `domain_id=${domainId}`;

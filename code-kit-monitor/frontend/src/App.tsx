@@ -35,6 +35,7 @@ import ApprovalPage from './pages/ApprovalPage';
 import UserArea from './components/UserSelect';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useAuth } from './stores/auth';
+import { safeFetch } from './utils/requestDedup';
 
 function EmptyPerm() {
   return (
@@ -111,16 +112,17 @@ export default function App() {
   const { isAdmin, rolePermissions, fetchMe, fetchUsers, loaded } = useAuth();
   const [alertCount, setAlertCount] = useState(0);
 
-  // 轮询告警数量
+  // 轮询告警数量（接入去重层，降低频率 15s → 30s）
   useEffect(() => {
     const pollAlerts = () => {
-      fetch('/api/alerts/count')
-        .then(r => r.json())
-        .then(d => setAlertCount(d.unacknowledged || 0))
-        .catch(() => {});
+      safeFetch('/api/alerts/count').then(result => {
+        if (result.ok && result.data) {
+          setAlertCount(result.data.unacknowledged || 0);
+        }
+      });
     };
     pollAlerts();
-    const t = setInterval(pollAlerts, 15000);
+    const t = setInterval(pollAlerts, 30000);
     return () => clearInterval(t);
   }, []);
 

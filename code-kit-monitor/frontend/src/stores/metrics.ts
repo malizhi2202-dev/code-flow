@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 
 interface MetricsData {
   buckets: any[]; model_totals: Record<string, number>;
@@ -17,14 +18,12 @@ export const useMetrics = create<MetricsState>((set) => ({
   data: null, global: null, loading: false,
   fetchMetrics: async (entityType, entityId, minutes = 60) => {
     set({ loading: true });
-    const res = await fetch(`/api/metrics/${entityType}/${entityId}?minutes=${minutes}`, { headers: { 'X-User-Id': uid() } });
-    const data = await res.json();
-    set({ data, loading: false });
+    const result = await safeFetch(`/api/metrics/${entityType}/${entityId}?minutes=${minutes}`);
+    set({ data: (result.ok && result.data) ? result.data : null, loading: false });
   },
   fetchGlobal: async (minutes = 60) => {
     set({ loading: true });
-    const res = await fetch(`/api/metrics/global?minutes=${minutes}`, { headers: { 'X-User-Id': uid() } });
-    const data = await res.json();
-    set({ global: data, loading: false });
+    const result = await safeFetch(`/api/metrics/global?minutes=${minutes}`);
+    set({ global: (result.ok && result.data) ? result.data : null, loading: false });
   },
 }));

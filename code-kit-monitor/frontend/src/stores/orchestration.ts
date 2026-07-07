@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 import type { EdgeConfig } from '../lib/orchestration-sync';
 
 export interface OrchestrationInstance {
@@ -80,9 +81,8 @@ export const useOrchestration = create<OrchestrationState>((set, get) => ({
 
   fetchOrchestrations: async () => {
     set({ loading: true });
-    const res = await fetch('/api/orchestration', { headers: { 'X-User-Id': uid() } });
-    const data = await res.json();
-    set({ orchestrations: Array.isArray(data) ? data : [], loading: false });
+    const result = await safeFetch('/api/orchestration');
+    set({ orchestrations: (result.ok && result.data ? (Array.isArray(result.data) ? result.data : []) : []), loading: false });
   },
 
   fetchDetail: async (id: number) => {

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 
 export interface Tool {
   id: number; owner_id: string; type: 'plugin' | 'skill' | 'mcp';
@@ -25,11 +26,9 @@ export const useTools = create<ToolsState>((set, get) => ({
   setFilter: (f) => set({ filter: f }),
   fetchTools: async (type?) => {
     set({ loading: true });
-    const uid = localStorage.getItem('current_user_id') || 'admin';
     const url = type ? `/api/tools?type=${type}` : '/api/tools';
-    const res = await fetch(url, { headers: { 'X-User-Id': uid } });
-    const data = await res.json();
-    set({ tools: data.tools || [], loading: false });
+    const result = await safeFetch(url);
+    set({ tools: (result.ok && result.data ? result.data.tools : []) || [], loading: false });
   },
   createTool: async (payload) => {
     const uid = localStorage.getItem('current_user_id') || 'admin';

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { safeFetch } from '../utils/requestDedup';
 
 export interface Project {
   id: number; owner_id: string; name: string;
@@ -23,9 +24,8 @@ export const useProjects = create<ProjectsState>((set, get) => ({
   projects: [], loading: false,
   fetchProjects: async () => {
     set({ loading: true });
-    const res = await fetch('/api/projects', { headers: { 'X-User-Id': uid() } });
-    const data = await res.json();
-    set({ projects: data.projects || [], loading: false });
+    const result = await safeFetch('/api/projects');
+    set({ projects: (result.ok && result.data ? result.data.projects : []) || [], loading: false });
   },
   createProject: async (payload) => {
     const res = await fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-Id': uid() }, body: JSON.stringify(payload) });
