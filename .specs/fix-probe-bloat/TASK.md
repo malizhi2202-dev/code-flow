@@ -15,6 +15,7 @@ Wave 2:            T02 (depends on T01)
 ---
 
 <task id="T01" parallel="true">
+  <auto>true</auto>
   <name>新建 agent_probe_latest 模型 + 表</name>
   <read_files>
     backend/models/agent_probe.py
@@ -36,6 +37,7 @@ Wave 2:            T02 (depends on T01)
 </task>
 
 <task id="T02" parallel="false">
+  <auto>true</auto>
   <name>probe service upsert + API 改读状态表</name>
   <read_files>
     backend/services/agent_probe_service.py
